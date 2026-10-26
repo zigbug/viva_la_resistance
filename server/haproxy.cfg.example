@@ -1,0 +1,28 @@
+global
+    log /dev/log local0
+    maxconn 8192
+    user haproxy
+    group haproxy
+
+defaults
+    log global
+    mode tcp
+    option tcplog
+    timeout connect 5s
+    timeout client  1h
+    timeout server  1h
+
+# 443: SNI-роутинг между mtproto (mtg) и VLESS+Reality (sing-box).
+# Оба бэкенда слушают только localhost.
+frontend tls_in
+    bind *:443
+    tcp-request inspect-delay 5s
+    tcp-request content accept if { req_ssl_hello_type 1 }
+    use_backend sb_reality if { req.ssl_sni -i vpn.example.com }
+    default_backend mtg_backend
+
+backend mtg_backend
+    server mtg 127.0.0.1:8447 send-proxy-v2
+
+backend sb_reality
+    server singbox 127.0.0.1:8449

@@ -1,0 +1,31 @@
+{
+  "log": { "level": "info", "timestamp": true },
+  "inbounds": [
+    {
+      "type": "vless",
+      "tag": "vless-reality",
+      "listen": "127.0.0.1",
+      "listen_port": 8449,
+      "users": [
+        {
+          "name": "user1",
+          "uuid": "REPLACE_WITH_UUID",
+          "flow": "xtls-rprx-vision"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "vpn.example.com",
+        "reality": {
+          "enabled": true,
+          "handshake": { "server": "127.0.0.1", "server_port": 9446 },
+          "private_key": "REPLACE_WITH_PRIVATE_KEY",
+          "short_id": ["0123456789abcdef"]
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    { "type": "direct", "tag": "direct" }
+  ]
+}

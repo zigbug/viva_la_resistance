@@ -1,0 +1,14 @@
+{
+  "name": "Viva la Resistance",
+  "address": "95.182.85.196",
+  "port": 443,
+  "uuid": "00000000-0000-0000-0000-000000000000",
+  "flow": "xtls-rprx-vision",
+  "server_name": "vpn.905911.ru",
+  "reality_public_key": "REPLACE_WITH_PUBLIC_KEY",
+  "reality_short_id": "0123456789abcdef",
+  "services": {
+    "youtube": true,
+    "instagram": true
+  }
+}
