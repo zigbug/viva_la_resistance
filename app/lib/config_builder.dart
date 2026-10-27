@@ -108,7 +108,7 @@ class ConfigBuilder {
     }
 
     final root = <String, Object?>{
-      'log': {'level': 'info', 'timestamp': true},
+      'log': {'level': 'debug', 'timestamp': true},
       'dns': dns,
       'inbounds': [
         {

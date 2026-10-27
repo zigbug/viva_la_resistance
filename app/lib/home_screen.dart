@@ -3,6 +3,7 @@ import 'package:flutter_singbox_client/flutter_singbox_client.dart';
 
 import 'app_config.dart';
 import 'config_builder.dart';
+import 'log_viewer.dart';
 import 'vpn_controller.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -35,6 +36,19 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Viva la Resistance'),
         centerTitle: true,
+        actions: [
+          IconButton(
+            tooltip: 'Журнал и соединения',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => LogViewerScreen(controller: controller),
+                ),
+              );
+            },
+            icon: const Icon(Icons.article_outlined),
+          ),
+        ],
       ),
       body: ListenableBuilder(
         listenable: controller,
