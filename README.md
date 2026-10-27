@@ -93,7 +93,7 @@ defaultConfig {
   "port": 443,
   "uuid": "UUID клиента",
   "flow": "xtls-rprx-vision",
-  "server_name": "vpn.905911.ru",
+  "server_name": "vlr.905911.ru",
   "reality_public_key": "PUBLIC KEY",
   "reality_short_id": "SHORT ID",
   "services": { "youtube": true, "instagram": true }
@@ -128,13 +128,13 @@ defaultConfig {
 
 ```
 :443 HAProxy
-  ├─ SNI vpn.905911.ru → 127.0.0.1:8449  sing-box VLESS+Reality
+  ├─ SNI vlr.905911.ru → 127.0.0.1:8449  sing-box VLESS+Reality
   └─ остальное         → 127.0.0.1:8447  mtg (Telegram)
 ```
 
 Reality при неизвестном клиенте проксирует рукопожатие на локальный
 nginx-прикрытие, поэтому активный зонд видит настоящий сайт. Для валидного
-сертификата нужна A-запись `vpn.905911.ru` и Let's Encrypt (см. server/README).
+сертификата нужна A-запись `vlr.905911.ru` и Let's Encrypt (см. server/README).
 
 ## Проверка
 

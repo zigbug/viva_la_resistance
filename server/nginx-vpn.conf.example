@@ -1,7 +1,7 @@
 server {
     listen 80;
     listen [::]:80;
-    server_name vpn.example.com;
+    server_name vlr.example.com;
 
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
@@ -17,10 +17,10 @@ server {
 # Незнакомый TLS-клиент (активный зонд) получает настоящий сайт.
 server {
     listen 127.0.0.1:9446 ssl http2;
-    server_name vpn.example.com;
+    server_name vlr.example.com;
 
-    ssl_certificate /etc/letsencrypt/live/vpn.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/vpn.example.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/vlr.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/vlr.example.com/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_session_cache shared:vpn905911:1m;
     ssl_session_timeout 1h;

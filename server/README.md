@@ -6,7 +6,7 @@
 Интернет :443
    │
    ├─ HAProxy (SNI-роутинг)
-   │     ├─ SNI vpn.example.com → 127.0.0.1:8449  sing-box (VLESS+Reality)
+   │     ├─ SNI vlr.example.com → 127.0.0.1:8449  sing-box (VLESS+Reality)
    │     └─ everything else     → 127.0.0.1:8447  mtg (mtproto, PROXY v2)
    │
    └─ nginx :9446 (только localhost) — сайт-прикрытие для Reality
@@ -18,10 +18,10 @@ Reality(сервер) при незнакомом TLS-клиенте прокс�
 
 ## 1. Домен и сертификат
 
-A-запись `vpn.example.com` → IP сервера. Затем сертификат (HTTP-01):
+A-запись `vlr.example.com` → IP сервера. Затем сертификат (HTTP-01):
 
 ```bash
-certbot certonly --webroot -w /var/www/certbot -d vpn.example.com \
+certbot certonly --webroot -w /var/www/certbot -d vlr.example.com \
   --non-interactive --agree-tos --register-unsafely-without-email
 ```
 
@@ -47,7 +47,7 @@ docker logs sb-reality
 
 ## 4. nginx-прикрытие
 
-`server/nginx-vpn.conf.example` → `/etc/nginx/sites-available/vpn.example.com`,
+`server/nginx-vpn.conf.example` → `/etc/nginx/sites-available/vlr.example.com`,
 symlink в `sites-enabled`, `nginx -t && systemctl reload nginx`.
 
 ## 5. HAProxy (забирает 443 у nginx)
@@ -64,7 +64,7 @@ systemctl enable --now haproxy
 
 ```bash
 # прикрытие / активный зонд
-openssl s_client -connect 127.0.0.1:443 -servername vpn.example.com </dev/null
+openssl s_client -connect 127.0.0.1:443 -servername vlr.example.com </dev/null
 
 # сам туннель (sing-box клиент с SOCKS)
 curl --socks5-hostname 127.0.0.1:10808 https://api.ipify.org
@@ -82,7 +82,7 @@ Android-клиент — Flutter-приложение из этого репоз
 `libbox.aar` вручную не нужно.
 
 Важно: `server_name` в `app/assets/config.local.json` должен **точно совпадать**
-с `server_name` в серверном конфиге (`vpn.905911.ru`). При несовпадении SNI
+с `server_name` в серверном конфиге (`vlr.905911.ru`). При несовпадении SNI
 Reality считает соединение чужим и уводит его в прикрытие (mtg/nginx).
 
 A-запись домена нужна для валидного сертификата прикрытия и внешней проверки.
@@ -98,6 +98,6 @@ A-запись домена нужна для валидного сертифи�
 | port | 443 |
 | uuid | из users[] |
 | flow | xtls-rprx-vision |
-| server_name | vpn.example.com |
+| server_name | vlr.example.com |
 | reality_public_key | PublicKey из `generate reality-keypair` |
 | reality_short_id | из `short_id[]` |
