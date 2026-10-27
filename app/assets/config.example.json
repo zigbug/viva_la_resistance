@@ -1,6 +1,6 @@
 {
   "name": "Viva la Resistance",
-  "address": "95.182.85.196",
+  "address": "203.0.113.10",
   "port": 443,
   "uuid": "00000000-0000-0000-0000-000000000000",
   "flow": "xtls-rprx-vision",
@@ -10,5 +10,14 @@
   "services": {
     "youtube": true,
     "instagram": true
+  },
+  "packages": {
+    "youtube": [
+      "com.google.android.youtube",
+      "app.revanced.android.youtube"
+    ],
+    "instagram": [
+      "com.instagram.android"
+    ]
   }
 }

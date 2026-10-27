@@ -16,12 +16,36 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 ---------------------------------------------------------------------------
 
-This project embeds sing-box as a native library (libbox.aar).
+This project uses the following GPL-3.0 components.
 
-  Project:  sing-box
-  Upstream: https://github.com/SagerNet/sing-box
-  Version:  v1.14.4
-  Source:   https://github.com/SagerNet/sing-box/tree/v1.14.4
-  License:  GNU General Public License v3.0
+1. sing-box — proxy/VPN core (embedded as a prebuilt libbox.aar)
 
-The library is built from the pinned upstream tag by tools/build-libbox.sh.
+   Project:  https://github.com/SagerNet/sing-box
+   Version:  v1.14.0-alpha.20 (bundled with flutter_singbox_client 1.1.0)
+   Source:   https://github.com/SagerNet/sing-box/tree/v1.14.0-alpha.20
+   License:  GNU General Public License v3.0
+
+   The server example in server/ pins the stable release v1.14.4:
+   https://github.com/SagerNet/sing-box/tree/v1.14.4
+
+2. flutter_singbox_client — Flutter plugin and Android native layer
+
+   Project:  https://github.com/amir-zr/flutter_singbox_client
+   Version:  1.1.0
+   Source:   https://github.com/amir-zr/flutter_singbox_client
+   Pub:      https://pub.dev/packages/flutter_singbox_client/versions/1.1.0
+   License:  GNU General Public License v3.0 only (GPL-3.0-only)
+
+   The Android layer follows the service lifecycle, PlatformInterface
+   integration and network monitor patterns of sing-box-for-android:
+   https://github.com/SagerNet/sing-box-for-android (GPL-3.0)
+
+3. geosite rule-sets
+
+   Project:  https://github.com/SagerNet/sing-geosite
+   Files:    app/assets/rule-sets/geosite-youtube.srs,
+             app/assets/rule-sets/geosite-instagram.srs
+   License:  GNU General Public License v3.0
+
+The full corresponding source code of this application is published at
+https://github.com/zigbug/viva_la_resistance under GPL-3.0.

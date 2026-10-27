@@ -25,6 +25,8 @@ server {
     ssl_session_cache shared:vpn905911:1m;
     ssl_session_timeout 1h;
 
+    # Сайт-прикрытие: подставьте СВОЙ домен/сайт. Нельзя проксировать на
+    # чужой домен (microsoft.com и т.п.) — это и есть «чужой» признак для зонда.
     location / {
         proxy_pass https://example.com;
         proxy_ssl_server_name on;

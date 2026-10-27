@@ -13,12 +13,10 @@ build/
 .gradle/
 local.properties
 
-# Android signing / libs
+# Android signing
 *.jks
 *.keystore
 key.properties
-app/android/app/libs/libbox.aar
-app/android/app/libs/libbox-legacy.aar
 
 # OS / editors
 .DS_Store
