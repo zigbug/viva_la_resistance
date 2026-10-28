@@ -1,0 +1,18 @@
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        flatDir {
+            dirs project(':flutter_singbox_client').file('libs')
+        }
+    }
+}
+
+rootProject.buildDir = '../build'
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.layout.buildDirectory
+}

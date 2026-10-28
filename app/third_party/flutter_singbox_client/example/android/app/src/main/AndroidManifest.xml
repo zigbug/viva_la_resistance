@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+        Permissions inherited automatically from the SDK manifest via manifest merging:
+          INTERNET, ACCESS_NETWORK_STATE, CHANGE_NETWORK_STATE, ACCESS_WIFI_STATE,
+          FOREGROUND_SERVICE, FOREGROUND_SERVICE_SYSTEM_EXEMPTED,
+          FOREGROUND_SERVICE_SPECIAL_USE, POST_NOTIFICATIONS, RECEIVE_BOOT_COMPLETED
+
+        The permissions below are example-app additions on top of the SDK baseline.
+    -->
+
+    <!-- ── Optional: Doze-mode exemption ────────────────────────────────── -->
+    <!-- Allows the app to request battery optimization exemption so the VPN
+         is not killed during Doze mode. Must be requested at runtime via
+         Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS.
+         Declare usage in your Play Store listing (Settings > App permissions). -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- ── Sensitive: Per-app proxy package picker ──────────────────────── -->
+    <!-- Required only to enumerate installed apps and display a selection UI
+         for split-tunneling / per-app proxy configuration. Not needed if
+         package names are hardcoded or provided through another mechanism.
+         Requires a Policy Declaration Form in Google Play Console. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+
+    <application
+        android:label="Flutter Singbox Client"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+
+        <!-- Receives dev.amirzr.singbox.DEVICE_BOOTED broadcast from the SDK's
+             BootReceiver after device boot. Reads persisted app state and
+             re-launches the app to restore the VPN connection. -->
+        <receiver
+            android:name=".BootRestartReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="dev.amirzr.singbox.DEVICE_BOOTED" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+
+</manifest>
