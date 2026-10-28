@@ -33,6 +33,15 @@ void main() {
 
     final route = root['route'] as Map;
     expect(route['final'], 'direct');
+
+    // Sniff MUST precede hijack-dns: otherwise DNS queries to the TUN
+    // gateway (172.19.0.2:53) leak to 'direct' via ip_is_private and the
+    // selected domains never resolve through the proxy.
+    final rules = (route['rules'] as List).cast<Map>();
+    expect(rules[0]['action'], 'sniff');
+    expect(rules[1]['protocol'], 'dns');
+    expect(rules[1]['action'], 'hijack-dns');
+
     final ruleSets = (route['rule_set'] as List).cast<Map>();
     expect(ruleSets.map((item) => item['tag']), [
       'geosite-youtube',

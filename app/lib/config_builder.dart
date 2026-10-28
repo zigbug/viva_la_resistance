@@ -33,8 +33,12 @@ class ConfigBuilder {
   }) {
     final ruleSets = <Map<String, Object?>>[];
     final routeRules = <Map<String, Object?>>[
-      {'protocol': 'dns', 'action': 'hijack-dns'},
+      // Sniff must run BEFORE hijack-dns / rule_set matching:
+      // protocol and domain are only known after sniffing. With this order
+      // DNS queries to the TUN gateway (e.g. 172.19.0.2:53) get hijacked
+      // instead of leaking to 'direct' via the ip_is_private rule below.
       {'action': 'sniff'},
+      {'protocol': 'dns', 'action': 'hijack-dns'},
     ];
     final dnsRules = <Map<String, Object?>>[];
 
