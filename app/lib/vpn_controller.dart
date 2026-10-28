@@ -175,6 +175,26 @@ class VpnController extends ChangeNotifier {
         time: DateTime.now(),
       ));
     }
+    // Fire and forget upload to server for remote debugging
+    _uploadLog(entry);
+  }
+
+  Future<void> _uploadLog(LogEntry entry) async {
+    try {
+      final url = Uri.parse('https://hub.905911.ru:8448/viva/logs');
+      await http.post(url, 
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'level': entry.level.name,
+          'message': entry.message,
+          'time': entry.time.toIso8601String(),
+          'coreVersion': _coreVersion,
+          'mode': _mode.name,
+        }),
+      ).timeout(const Duration(seconds: 5));
+    } catch (_) {
+      // ignore upload errors
+    }
   }
 
   /// Maps sing-box / Reality failures to a short diagnosis.
@@ -472,3 +492,7 @@ class VpnPermissionDenied implements Exception {
 
   String get message => 'Разрешение на VPN не выдано.';
 }
+
+
+import 'dart:convert';
+import 'package:http/http.dart' as http;
