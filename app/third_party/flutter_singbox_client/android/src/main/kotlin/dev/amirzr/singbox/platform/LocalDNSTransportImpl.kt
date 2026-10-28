@@ -1,34 +1,37 @@
 package dev.amirzr.singbox.platform
 
 import android.annotation.TargetApi
+import android.net.ConnectivityManager
 import android.os.Build
-import com.google.gson.JsonArray
-import com.google.gson.JsonObject
-import dev.amirzr.singbox.SingboxSettings
+import io.nekohasekai.libbox.ExchangeContext
 import io.nekohasekai.libbox.LocalDNSTransport
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.asExecutor
-import kotlinx.coroutines.suspendCancellableCoroutine
 import java.net.InetAddress
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
+import java.net.UnknownHostException
 
-class LocalDNSTransportImpl(private val platformInterface: BoxPlatformInterface) : LocalDNSTransport() {
-    @TargetApi(Build.VERSION_CODES.Q)
-    override fun rawQuery(network: String?, data: ByteArray?): ByteArray {
-        if (network.isNullOrEmpty() || data == null) {
-            throw Exception("invalid request")
+class LocalDNSTransportImpl(
+    private val connectivityManager: ConnectivityManager,
+) : LocalDNSTransport {
+
+    override fun raw(): Boolean = false
+
+    override fun lookup(ctx: ExchangeContext, network: String, domain: String) {
+        try {
+            val addrs = InetAddress.getAllByName(domain)
+            val result = addrs.mapNotNull { it.hostAddress }.joinToString("\n")
+            if (result.isEmpty()) {
+                ctx.errorCode(3) // NXDOMAIN
+            } else {
+                ctx.success(result)
+            }
+        } catch (e: UnknownHostException) {
+            ctx.errorCode(3) // NXDOMAIN
+        } catch (e: Exception) {
+            ctx.errorCode(2) // SERVFAIL
         }
-        // Use a simple DNS-over-UDP approach that works on all Android versions
-        // instead of DnsResolver which can be problematic on some ROMs
-        throw Exception("rawQuery not implemented")
     }
 
     @TargetApi(Build.VERSION_CODES.Q)
-    override fun lookup(network: String?, domain: String?): String {
-        if (network.isNullOrEmpty() || domain.isNullOrEmpty()) {
-            throw Exception("invalid request")
-        }
-        throw Exception("lookup not implemented")
+    override fun exchange(ctx: ExchangeContext, message: ByteArray) {
+        ctx.errorCode(2) // SERVFAIL - not implemented
     }
 }
