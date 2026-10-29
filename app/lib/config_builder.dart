@@ -25,6 +25,13 @@ extension TunnelModeInfo on TunnelMode {
 class ConfigBuilder {
   const ConfigBuilder._();
 
+  /// Core logging is switched off: the tunnel is verified, and on low-end
+  /// hardware a debug log firehose costs more than the tunnel itself. Enable it
+  /// together with `_captureCoreLogs` in vpn_controller.dart via
+  /// `--dart-define=VIVA_CORE_LOGS=true`.
+  static final bool enableCoreLogs =
+      const bool.fromEnvironment('VIVA_CORE_LOGS');
+
   static String build({
     required AppConfig config,
     required Set<ServiceId> services,
@@ -112,7 +119,9 @@ class ConfigBuilder {
     }
 
     final root = <String, Object?>{
-      'log': {'level': 'debug', 'timestamp': true},
+      'log': enableCoreLogs
+          ? {'level': 'debug', 'timestamp': true}
+          : {'disabled': true},
       'dns': dns,
       'inbounds': [
         {

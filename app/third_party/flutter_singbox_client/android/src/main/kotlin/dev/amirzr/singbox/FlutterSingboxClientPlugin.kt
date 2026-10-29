@@ -23,6 +23,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.PluginRegistry.ActivityResultListener
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 
@@ -92,62 +93,15 @@ class FlutterSingboxClientPlugin :
     }
 
     private fun setupEventChannels() {
-        // Manager-backed flows: emit directly to the Flutter sink, no sink field needed.
-        stateEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
-            override fun onListen(args: Any?, sink: EventChannel.EventSink) {
-                manager.serviceState.onEach { sink.success(it) }.launchIn(scope)
-            }
-            override fun onCancel(args: Any?) {}
-        })
-
-        trafficEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
-            override fun onListen(args: Any?, sink: EventChannel.EventSink) {
-                manager.trafficStats.onEach { sink.success(it) }.launchIn(scope)
-            }
-            override fun onCancel(args: Any?) {}
-        })
-
-        coreLogEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
-            override fun onListen(args: Any?, sink: EventChannel.EventSink) {
-                manager.logs.onEach { sink.success(it) }.launchIn(scope)
-            }
-            override fun onCancel(args: Any?) {}
-        })
-
-        connectionEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
-            override fun onListen(args: Any?, sink: EventChannel.EventSink) {
-                manager.connections.onEach { sink.success(it) }.launchIn(scope)
-            }
-            override fun onCancel(args: Any?) {}
-        })
-
-        groupEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
-            override fun onListen(args: Any?, sink: EventChannel.EventSink) {
-                manager.groups.onEach { sink.success(it) }.launchIn(scope)
-            }
-            override fun onCancel(args: Any?) {}
-        })
-
-        clashModeEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
-            override fun onListen(args: Any?, sink: EventChannel.EventSink) {
-                manager.clashMode.onEach { sink.success(it) }.launchIn(scope)
-            }
-            override fun onCancel(args: Any?) {}
-        })
-
-        clashModesEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
-            override fun onListen(args: Any?, sink: EventChannel.EventSink) {
-                manager.clashModes.onEach { sink.success(it) }.launchIn(scope)
-            }
-            override fun onCancel(args: Any?) {}
-        })
-
-        faultEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
-            override fun onListen(args: Any?, sink: EventChannel.EventSink) {
-                manager.alerts.onEach { sink.success(it) }.launchIn(scope)
-            }
-            override fun onCancel(args: Any?) {}
-        })
+        // Manager-backed flows: emit directly to the Flutter sink.
+        stateEventChannel.bindFlow(manager.serviceState)
+        trafficEventChannel.bindFlow(manager.trafficStats)
+        coreLogEventChannel.bindFlow(manager.logs)
+        connectionEventChannel.bindFlow(manager.connections)
+        groupEventChannel.bindFlow(manager.groups)
+        clashModeEventChannel.bindFlow(manager.clashMode)
+        clashModesEventChannel.bindFlow(manager.clashModes)
+        faultEventChannel.bindFlow(manager.alerts)
 
         // Test channels: sink is held so progress/result can be pushed from callbacks.
         networkQualityEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
@@ -167,6 +121,25 @@ class FlutterSingboxClientPlugin :
             override fun onCancel(args: Any?) {
                 stunSink = null
                 cancelStunTest()
+            }
+        })
+    }
+
+    // One collector per channel. Without cancelling it in onCancel() every
+    // re-subscribe from Dart would add another permanent collector that keeps
+    // the dead sink alive and delivers each event N times.
+    private val channelJobs = HashMap<EventChannel, Job>()
+
+    private fun <T> EventChannel.bindFlow(flow: Flow<T>) {
+        setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(args: Any?, sink: EventChannel.EventSink) {
+                channelJobs.remove(this@bindFlow)?.cancel()
+                channelJobs[this@bindFlow] =
+                    flow.onEach { sink.success(it) }.launchIn(scope)
+            }
+
+            override fun onCancel(args: Any?) {
+                channelJobs.remove(this@bindFlow)?.cancel()
             }
         })
     }
@@ -456,6 +429,7 @@ class FlutterSingboxClientPlugin :
         cancelNetworkQualityTest()
         cancelStunTest()
         scope.cancel()
+        channelJobs.clear()
         manager.dispose()
         appContext = null
     }

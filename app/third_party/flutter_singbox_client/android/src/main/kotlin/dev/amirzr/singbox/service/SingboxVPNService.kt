@@ -64,6 +64,14 @@ class SingboxVPNService : VpnService(), BoxPlatformInterface {
             return START_NOT_STICKY
         }
 
+        // START_STICKY redelivery / a repeated start intent must not create a
+        // second BoxService and network monitor: the previous ones would be
+        // dropped without being stopped, leaking their scopes and callbacks.
+        if (helper != null) {
+            Log.i(TAG, "onStartCommand ignored: service already running")
+            return START_STICKY
+        }
+
         serviceConfig = parseConfig(intent)
 
         val notif = ServiceNotificationHelper.buildNotification(

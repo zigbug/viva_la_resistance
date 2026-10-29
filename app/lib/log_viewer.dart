@@ -16,7 +16,8 @@ class _LogViewerScreenState extends State<LogViewerScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   final _searchController = TextEditingController();
-  final _scrollController = ScrollController();
+  final _logScrollController = ScrollController();
+  final _connectionScrollController = ScrollController();
 
   @override
   void initState() {
@@ -30,7 +31,8 @@ class _LogViewerScreenState extends State<LogViewerScreen>
   void dispose() {
     _tabController.dispose();
     _searchController.dispose();
-    _scrollController.dispose();
+    _logScrollController.dispose();
+    _connectionScrollController.dispose();
     widget.controller.removeListener(_onControllerChange);
     super.dispose();
   }
@@ -45,9 +47,6 @@ class _LogViewerScreenState extends State<LogViewerScreen>
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Журнал и соединения'),
@@ -123,7 +122,7 @@ class _LogViewerScreenState extends State<LogViewerScreen>
       return const Center(child: Text('Логов пока нет. Подключитесь к VPN.'));
     }
     return ListView.builder(
-      controller: _scrollController,
+      controller: _logScrollController,
       reverse: true,
       itemCount: entries.length,
       itemBuilder: (context, index) {
@@ -139,7 +138,7 @@ class _LogViewerScreenState extends State<LogViewerScreen>
       return const Center(child: Text('Соединений пока нет. Подключитесь к VPN.'));
     }
     return ListView.builder(
-      controller: _scrollController,
+      controller: _connectionScrollController,
       itemCount: entries.length,
       itemBuilder: (context, index) {
         final conn = entries[index];
