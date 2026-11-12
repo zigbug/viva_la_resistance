@@ -23,6 +23,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.PluginRegistry.ActivityResultListener
 import kotlinx.coroutines.*
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 
@@ -68,6 +69,9 @@ class FlutterSingboxClientPlugin :
     private var stunTest: io.nekohasekai.libbox.STUNTest? = null
     private var stunJob: kotlinx.coroutines.Job? = null
 
+    // Event channel subscription jobs (must be cancelled on onCancel to avoid leaks)
+    private val eventJobs = mutableMapOf<String, Job>()
+
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         val ctx = binding.applicationContext
         appContext = ctx
@@ -92,62 +96,37 @@ class FlutterSingboxClientPlugin :
     }
 
     private fun setupEventChannels() {
-        // Manager-backed flows: emit directly to the Flutter sink, no sink field needed.
-        stateEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
-            override fun onListen(args: Any?, sink: EventChannel.EventSink) {
-                manager.serviceState.onEach { sink.success(it) }.launchIn(scope)
-            }
-            override fun onCancel(args: Any?) {}
-        })
+        fun <T> bindFlow(
+            channel: EventChannel,
+            key: String,
+            flow: kotlinx.coroutines.flow.Flow<T>,
+        ) {
+            channel.setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(args: Any?, sink: EventChannel.EventSink) {
+                    eventJobs.remove(key)?.cancel()
+                    eventJobs[key] = flow.onEach { value ->
+                        try {
+                            sink.success(value)
+                        } catch (_: Throwable) {
+                            // Sink may be closed during teardown.
+                        }
+                    }.launchIn(scope)
+                }
 
-        trafficEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
-            override fun onListen(args: Any?, sink: EventChannel.EventSink) {
-                manager.trafficStats.onEach { sink.success(it) }.launchIn(scope)
-            }
-            override fun onCancel(args: Any?) {}
-        })
+                override fun onCancel(args: Any?) {
+                    eventJobs.remove(key)?.cancel()
+                }
+            })
+        }
 
-        coreLogEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
-            override fun onListen(args: Any?, sink: EventChannel.EventSink) {
-                manager.logs.onEach { sink.success(it) }.launchIn(scope)
-            }
-            override fun onCancel(args: Any?) {}
-        })
-
-        connectionEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
-            override fun onListen(args: Any?, sink: EventChannel.EventSink) {
-                manager.connections.onEach { sink.success(it) }.launchIn(scope)
-            }
-            override fun onCancel(args: Any?) {}
-        })
-
-        groupEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
-            override fun onListen(args: Any?, sink: EventChannel.EventSink) {
-                manager.groups.onEach { sink.success(it) }.launchIn(scope)
-            }
-            override fun onCancel(args: Any?) {}
-        })
-
-        clashModeEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
-            override fun onListen(args: Any?, sink: EventChannel.EventSink) {
-                manager.clashMode.onEach { sink.success(it) }.launchIn(scope)
-            }
-            override fun onCancel(args: Any?) {}
-        })
-
-        clashModesEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
-            override fun onListen(args: Any?, sink: EventChannel.EventSink) {
-                manager.clashModes.onEach { sink.success(it) }.launchIn(scope)
-            }
-            override fun onCancel(args: Any?) {}
-        })
-
-        faultEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
-            override fun onListen(args: Any?, sink: EventChannel.EventSink) {
-                manager.alerts.onEach { sink.success(it) }.launchIn(scope)
-            }
-            override fun onCancel(args: Any?) {}
-        })
+        bindFlow(stateEventChannel, "state", manager.serviceState)
+        bindFlow(trafficEventChannel, "traffic", manager.trafficStats)
+        bindFlow(coreLogEventChannel, "logs", manager.logs)
+        bindFlow(connectionEventChannel, "connections", manager.connections)
+        bindFlow(groupEventChannel, "groups", manager.groups)
+        bindFlow(clashModeEventChannel, "clash_mode", manager.clashMode)
+        bindFlow(clashModesEventChannel, "clash_modes", manager.clashModes)
+        bindFlow(faultEventChannel, "alerts", manager.alerts)
 
         // Test channels: sink is held so progress/result can be pushed from callbacks.
         networkQualityEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
@@ -442,6 +421,8 @@ class FlutterSingboxClientPlugin :
     // ── FlutterPlugin ──────────────────────────────────────────────────────
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        eventJobs.values.forEach { it.cancel() }
+        eventJobs.clear()
         methodChannel.setMethodCallHandler(null)
         stateEventChannel.setStreamHandler(null)
         trafficEventChannel.setStreamHandler(null)

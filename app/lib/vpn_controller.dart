@@ -45,6 +45,9 @@ class VpnController extends ChangeNotifier {
   StreamSubscription<List<LogEntry>>? _logSubscription;
   StreamSubscription<List<ConnectionInfo>>? _connectionSubscription;
 
+  Timer? _uiNotifyTimer;
+  bool _uiNotifyPending = false;
+
   ServiceState get state => _state;
   Set<ServiceId> get services => Set.unmodifiable(_services);
   TunnelMode get mode => _mode;
@@ -70,7 +73,8 @@ class VpnController extends ChangeNotifier {
   }
 
   /// All captured connection entries (newest first).
-  List<ConnectionInfo> get connections => List.unmodifiable(_connections.reversed.toList());
+  List<ConnectionInfo> get connections =>
+      List.unmodifiable(_connections.reversed.toList());
 
   LogLevel get logFilterLevel => _logFilterLevel;
   String get logSearchQuery => _logSearchQuery;
@@ -94,72 +98,87 @@ class VpnController extends ChangeNotifier {
 
     _stateSubscription = client.serviceStateStream.listen((state) {
       _state = state;
-      _addLog(LogEntry(
-        level: LogLevel.info,
-        message: 'Service state changed: ${state.name}',
-        time: DateTime.now(),
-      ));
+      _addLog(
+        LogEntry(
+          level: LogLevel.info,
+          message: 'Service state changed: ${state.name}',
+          time: DateTime.now(),
+        ),
+      );
       if (state.isRunning || state.isIdle) {
         _busy = false;
       }
-      notifyListeners();
+      _scheduleNotify(immediate: true);
     });
 
     _faultSubscription = client.faultStream.listen((message) {
       _busy = false;
       _error = message;
-      _addLog(LogEntry(
-        level: LogLevel.error,
-        message: 'FAULT: $message',
-        time: DateTime.now(),
-      ));
-      notifyListeners();
+      _addLog(
+        LogEntry(
+          level: LogLevel.error,
+          message: 'FAULT: $message',
+          time: DateTime.now(),
+        ),
+      );
+      _scheduleNotify(immediate: true);
     });
 
     _trafficSubscription = client.trafficStatsStream.listen((stats) {
       _traffic = stats;
-      notifyListeners();
+      _scheduleNotify();
     });
 
     // Core log stream - high volume, batched
-    _logSubscription = client.coreLogStream.listen((entries) {
-      for (final entry in entries) {
-        _addLog(entry);
-      }
-      notifyListeners();
-    }, onError: (error) {
-      _addLog(LogEntry(
-        level: LogLevel.error,
-        message: 'Log stream error: $error',
-        time: DateTime.now(),
-      ));
-    });
+    _logSubscription = client.coreLogStream.listen(
+      (entries) {
+        for (final entry in entries) {
+          _addLog(entry);
+        }
+        _scheduleNotify();
+      },
+      onError: (error) {
+        _addLog(
+          LogEntry(
+            level: LogLevel.error,
+            message: 'Log stream error: $error',
+            time: DateTime.now(),
+          ),
+        );
+      },
+    );
 
     // Connection stream - every open/close event
-    _connectionSubscription = client.connectionStream.listen((conns) {
-      // Find new connections not in our list
-      final existingIds = _connections.map((c) => c.id).toSet();
-      for (final conn in conns) {
-        if (!existingIds.contains(conn.id)) {
-          _addConnection(conn);
-        } else {
-          // Update existing (e.g., bytes, closedAt)
-          final idx = _connections.indexWhere((c) => c.id == conn.id);
-          if (idx >= 0) {
-            _connections[idx] = conn;
+    _connectionSubscription = client.connectionStream.listen(
+      (conns) {
+        // Find new connections not in our list
+        final existingIds = _connections.map((c) => c.id).toSet();
+        for (final conn in conns) {
+          if (!existingIds.contains(conn.id)) {
+            _addConnection(conn);
+          } else {
+            // Update existing (e.g., bytes, closedAt)
+            final idx = _connections.indexWhere((c) => c.id == conn.id);
+            if (idx >= 0) {
+              _connections[idx] = conn;
+            }
           }
         }
-      }
-      notifyListeners();
-    }, onError: (error) {
-      _addLog(LogEntry(
-        level: LogLevel.error,
-        message: 'Connection stream error: $error',
-        time: DateTime.now(),
-      ));
-    });
+        _scheduleNotify();
+      },
+      onError: (error) {
+        _addLog(
+          LogEntry(
+            level: LogLevel.error,
+            message: 'Connection stream error: $error',
+            time: DateTime.now(),
+          ),
+        );
+        _scheduleNotify();
+      },
+    );
 
-    notifyListeners();
+    _scheduleNotify(immediate: true);
   }
 
   void _addLog(LogEntry entry) {
@@ -169,31 +188,9 @@ class VpnController extends ChangeNotifier {
     }
     final hint = _rknHint(entry.message);
     if (hint != null) {
-      _logs.add(LogEntry(
-        level: LogLevel.warn,
-        message: hint,
-        time: DateTime.now(),
-      ));
-    }
-    // Fire and forget upload to server for remote debugging
-    _uploadLog(entry);
-  }
-
-  Future<void> _uploadLog(LogEntry entry) async {
-    try {
-      final url = Uri.parse('https://hub.905911.ru:8448/viva/logs');
-      await http.post(url, 
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'level': entry.level.name,
-          'message': entry.message,
-          'time': entry.time.toIso8601String(),
-          'coreVersion': _coreVersion,
-          'mode': _mode.name,
-        }),
-      ).timeout(const Duration(seconds: 5));
-    } catch (_) {
-      // ignore upload errors
+      _logs.add(
+        LogEntry(level: LogLevel.warn, message: hint, time: DateTime.now()),
+      );
     }
   }
 
@@ -235,7 +232,9 @@ class VpnController extends ChangeNotifier {
       return 'ТАЙМАУТ ДО СЕРВЕРА: пакеты до 443 не доходят или ответа нет. '
           'Так выглядит дроп на стороне провайдера/РКН, либо сервер недоступен.';
     }
-    if (text.contains('reset') || text.contains('refused') || text.contains('eof')) {
+    if (text.contains('reset') ||
+        text.contains('refused') ||
+        text.contains('eof')) {
       return 'СОЕДИНЕНИЕ ОБОРВАНО: RST/EOF до установки туннеля. '
           'Частый признак DPI. Если повторяется только на YouTube/Instagram '
           'после успешного connect — режут уже целевой трафик, не вход.';
@@ -250,13 +249,32 @@ class VpnController extends ChangeNotifier {
       _connections.removeRange(0, _connections.length - _maxConnectionEntries);
     }
     // Also log connection events
-    _addLog(LogEntry(
-      level: LogLevel.info,
-      message: conn.isActive
-          ? 'CONNECT ${conn.network.toUpperCase()} ${conn.domain.isNotEmpty ? conn.domain : conn.destination} → ${conn.outbound} (rule: ${conn.rule})'
-          : 'CLOSE ${conn.network.toUpperCase()} ${conn.domain.isNotEmpty ? conn.domain : conn.destination} ↑${conn.uplinkTotalBytes} ↓${conn.downlinkTotalBytes}',
-      time: DateTime.now(),
-    ));
+    _addLog(
+      LogEntry(
+        level: LogLevel.info,
+        message: conn.isActive
+            ? 'CONNECT ${conn.network.toUpperCase()} ${conn.domain.isNotEmpty ? conn.domain : conn.destination} → ${conn.outbound} (rule: ${conn.rule})'
+            : 'CLOSE ${conn.network.toUpperCase()} ${conn.domain.isNotEmpty ? conn.domain : conn.destination} ↑${conn.uplinkTotalBytes} ↓${conn.downlinkTotalBytes}',
+        time: DateTime.now(),
+      ),
+    );
+  }
+
+  void _scheduleNotify({bool immediate = false}) {
+    if (immediate) {
+      _uiNotifyTimer?.cancel();
+      _uiNotifyTimer = null;
+      _uiNotifyPending = false;
+      notifyListeners();
+      return;
+    }
+    if (_uiNotifyPending) return;
+    _uiNotifyPending = true;
+    _uiNotifyTimer = Timer(const Duration(milliseconds: 250), () {
+      _uiNotifyPending = false;
+      _uiNotifyTimer = null;
+      notifyListeners();
+    });
   }
 
   void setLogFilterLevel(LogLevel level) {
@@ -288,10 +306,14 @@ class VpnController extends ChangeNotifier {
     buffer.writeln('Core: $_coreVersion');
     buffer.writeln('Mode: ${_mode.name}');
     buffer.writeln('Services: ${_services.map((s) => s.name).join(", ")}');
-    buffer.writeln('Filter: ${_logFilterLevel.name} ${_logSearchQuery.isNotEmpty ? "| search: $_logSearchQuery" : ""}');
+    buffer.writeln(
+      'Filter: ${_logFilterLevel.name} ${_logSearchQuery.isNotEmpty ? "| search: $_logSearchQuery" : ""}',
+    );
     buffer.writeln('─' * 60);
     for (final entry in entries) {
-      buffer.writeln('${entry.time.toIso8601String()} [${entry.level.name.toUpperCase()}] ${entry.message}');
+      buffer.writeln(
+        '${entry.time.toIso8601String()} [${entry.level.name.toUpperCase()}] ${entry.message}',
+      );
     }
     return buffer.toString();
   }
@@ -299,7 +321,9 @@ class VpnController extends ChangeNotifier {
   /// Export connections as CSV for analysis.
   String exportConnectionsCsv() {
     final buffer = StringBuffer();
-    buffer.writeln('id,time,closedAt,inbound,inboundType,network,source,destination,domain,protocol,user,outbound,outboundType,rule,chain,packageName,uplinkBytes,downlinkBytes');
+    buffer.writeln(
+      'id,time,closedAt,inbound,inboundType,network,source,destination,domain,protocol,user,outbound,outboundType,rule,chain,packageName,uplinkBytes,downlinkBytes',
+    );
     for (final conn in _connections) {
       buffer.write('${conn.id},');
       buffer.write('${conn.createdAt.toIso8601String()},');
@@ -369,15 +393,40 @@ class VpnController extends ChangeNotifier {
     _busy = true;
     _error = null;
     _traffic = TrafficStats.zero;
-    _addLog(LogEntry(level: LogLevel.info, message: '=== CONNECT ATTEMPT ===', time: DateTime.now()));
-    _addLog(LogEntry(level: LogLevel.info, message: 'Mode: ${_mode.name}, Services: ${_services.map((s) => s.name).join(", ")}', time: DateTime.now()));
+    _addLog(
+      LogEntry(
+        level: LogLevel.info,
+        message: '=== CONNECT ATTEMPT ===',
+        time: DateTime.now(),
+      ),
+    );
+    _addLog(
+      LogEntry(
+        level: LogLevel.info,
+        message:
+            'Mode: ${_mode.name}, Services: ${_services.map((s) => s.name).join(", ")}',
+        time: DateTime.now(),
+      ),
+    );
     notifyListeners();
 
     try {
       if (_mode == TunnelMode.domains) {
-        _addLog(LogEntry(level: LogLevel.debug, message: 'Installing rule sets...', time: DateTime.now()));
+        _addLog(
+          LogEntry(
+            level: LogLevel.debug,
+            message: 'Installing rule sets...',
+            time: DateTime.now(),
+          ),
+        );
         await installRuleSets(paths.working, _services);
-        _addLog(LogEntry(level: LogLevel.info, message: 'Rule sets installed', time: DateTime.now()));
+        _addLog(
+          LogEntry(
+            level: LogLevel.info,
+            message: 'Rule sets installed',
+            time: DateTime.now(),
+          ),
+        );
       }
 
       final content = ConfigBuilder.build(
@@ -387,9 +436,21 @@ class VpnController extends ChangeNotifier {
         workingPath: paths.working,
       );
 
-      _addLog(LogEntry(level: LogLevel.debug, message: 'Validating config with sing-box...', time: DateTime.now()));
+      _addLog(
+        LogEntry(
+          level: LogLevel.debug,
+          message: 'Validating config with sing-box...',
+          time: DateTime.now(),
+        ),
+      );
       await client.checkConfig(content);
-      _addLog(LogEntry(level: LogLevel.info, message: 'Config validation passed', time: DateTime.now()));
+      _addLog(
+        LogEntry(
+          level: LogLevel.info,
+          message: 'Config validation passed',
+          time: DateTime.now(),
+        ),
+      );
 
       final granted = await client.requestVPNPermission();
       if (!granted) {
@@ -404,7 +465,14 @@ class VpnController extends ChangeNotifier {
         for (final service in _services) ...config.packagesFor(service),
       };
 
-      _addLog(LogEntry(level: LogLevel.info, message: 'Starting VPN service (per-app: ${_mode == TunnelMode.apps}, packages: ${packages.join(", ")})', time: DateTime.now()));
+      _addLog(
+        LogEntry(
+          level: LogLevel.info,
+          message:
+              'Starting VPN service (per-app: ${_mode == TunnelMode.apps}, packages: ${packages.join(", ")})',
+          time: DateTime.now(),
+        ),
+      );
 
       await client.connect(
         SessionOptions(
@@ -425,21 +493,45 @@ class VpnController extends ChangeNotifier {
           ),
         ),
       );
-      _addLog(LogEntry(level: LogLevel.info, message: 'VPN service started successfully', time: DateTime.now()));
+      _addLog(
+        LogEntry(
+          level: LogLevel.info,
+          message: 'VPN service started successfully',
+          time: DateTime.now(),
+        ),
+      );
     } on VpnPermissionDenied catch (error) {
       _busy = false;
       _error = error.message;
-      _addLog(LogEntry(level: LogLevel.error, message: 'VPN permission denied', time: DateTime.now()));
+      _addLog(
+        LogEntry(
+          level: LogLevel.error,
+          message: 'VPN permission denied',
+          time: DateTime.now(),
+        ),
+      );
       notifyListeners();
     } on PlatformException catch (error) {
       _busy = false;
       _error = error.message ?? error.code;
-      _addLog(LogEntry(level: LogLevel.error, message: 'Platform error: ${error.code} ${error.message}', time: DateTime.now()));
+      _addLog(
+        LogEntry(
+          level: LogLevel.error,
+          message: 'Platform error: ${error.code} ${error.message}',
+          time: DateTime.now(),
+        ),
+      );
       notifyListeners();
     } catch (error) {
       _busy = false;
       _error = _humanize(error);
-      _addLog(LogEntry(level: LogLevel.error, message: 'Connect error: $error', time: DateTime.now()));
+      _addLog(
+        LogEntry(
+          level: LogLevel.error,
+          message: 'Connect error: $error',
+          time: DateTime.now(),
+        ),
+      );
       notifyListeners();
     }
   }
@@ -448,15 +540,33 @@ class VpnController extends ChangeNotifier {
     if (_busy || !_state.isRunning) return;
     _busy = true;
     _error = null;
-    _addLog(LogEntry(level: LogLevel.info, message: '=== DISCONNECT ===', time: DateTime.now()));
+    _addLog(
+      LogEntry(
+        level: LogLevel.info,
+        message: '=== DISCONNECT ===',
+        time: DateTime.now(),
+      ),
+    );
     notifyListeners();
     try {
       await client.disconnect();
-      _addLog(LogEntry(level: LogLevel.info, message: 'VPN service stopped', time: DateTime.now()));
+      _addLog(
+        LogEntry(
+          level: LogLevel.info,
+          message: 'VPN service stopped',
+          time: DateTime.now(),
+        ),
+      );
     } catch (error) {
       _busy = false;
       _error = _humanize(error);
-      _addLog(LogEntry(level: LogLevel.error, message: 'Disconnect error: $error', time: DateTime.now()));
+      _addLog(
+        LogEntry(
+          level: LogLevel.error,
+          message: 'Disconnect error: $error',
+          time: DateTime.now(),
+        ),
+      );
       notifyListeners();
     }
   }
@@ -478,6 +588,7 @@ class VpnController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _uiNotifyTimer?.cancel();
     _stateSubscription?.cancel();
     _faultSubscription?.cancel();
     _trafficSubscription?.cancel();
@@ -492,7 +603,3 @@ class VpnPermissionDenied implements Exception {
 
   String get message => 'Разрешение на VPN не выдано.';
 }
-
-
-import 'dart:convert';
-import 'package:http/http.dart' as http;

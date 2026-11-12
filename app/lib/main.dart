@@ -35,7 +35,7 @@ String _describeError(Object error) {
   return text.startsWith(prefix) ? text.substring(prefix.length) : text;
 }
 
-class VivaApp extends StatelessWidget {
+class VivaApp extends StatefulWidget {
   const VivaApp({
     super.key,
     required this.client,
@@ -48,6 +48,29 @@ class VivaApp extends StatelessWidget {
   final AppConfig config;
 
   @override
+  State<VivaApp> createState() => _VivaAppState();
+}
+
+class _VivaAppState extends State<VivaApp> {
+  late final VpnController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VpnController(
+      client: widget.client,
+      paths: widget.paths,
+      config: widget.config,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = ColorScheme.fromSeed(
       seedColor: const Color(0xFF4CAF50),
@@ -55,7 +78,7 @@ class VivaApp extends StatelessWidget {
     );
 
     return MaterialApp(
-      title: config.name,
+      title: widget.config.name,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: scheme,
@@ -74,9 +97,7 @@ class VivaApp extends StatelessWidget {
           ),
         ),
       ),
-      home: HomeScreen(
-        controller: VpnController(client: client, paths: paths, config: config),
-      ),
+      home: HomeScreen(controller: _controller),
     );
   }
 }
