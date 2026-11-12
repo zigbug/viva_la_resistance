@@ -54,10 +54,8 @@ class VpnController extends ChangeNotifier {
   StreamSubscription<List<LogEntry>>? _logSubscription;
   StreamSubscription<List<ConnectionInfo>>? _connectionSubscription;
 
-  /// Connection events arrive dozens of times per second; rebuilding the whole
-  /// UI for each of them stalls weak devices. The list is always updated, only
-  /// the notification is coalesced (traffic updates also notify once a second).
-  DateTime _lastConnectionNotify = DateTime.fromMillisecondsSinceEpoch(0);
+  Timer? _uiNotifyTimer;
+  bool _uiNotifyPending = false;
 
   ServiceState get state => _state;
   Set<ServiceId> get services => Set.unmodifiable(_services);
@@ -119,7 +117,7 @@ class VpnController extends ChangeNotifier {
       if (state.isRunning || state.isIdle) {
         _busy = false;
       }
-      notifyListeners();
+      _scheduleNotify(immediate: true);
     });
 
     _faultSubscription = client.faultStream.listen((message) {
@@ -132,68 +130,50 @@ class VpnController extends ChangeNotifier {
           time: DateTime.now(),
         ),
       );
-      notifyListeners();
+      _scheduleNotify(immediate: true);
     });
 
     _trafficSubscription = client.trafficStatsStream.listen((stats) {
       _traffic = stats;
-      notifyListeners();
+      _scheduleNotify();
     });
 
-    // Core log stream - high volume, batched. Off unless explicitly enabled.
-    if (_captureCoreLogs) {
-      _logSubscription = client.coreLogStream.listen(
-        (entries) {
-          for (final entry in entries) {
-            _addLog(entry);
-          }
-          notifyListeners();
-        },
-        onError: (error) {
-          _addLog(
-            LogEntry(
-              level: LogLevel.error,
-              message: 'Log stream error: $error',
-              time: DateTime.now(),
-            ),
-          );
-        },
-      );
-    }
+    // Core log stream - high volume, batched
+    _logSubscription = client.coreLogStream.listen(
+      (entries) {
+        for (final entry in entries) {
+          _addLog(entry);
+        }
+        _scheduleNotify();
+      },
+      onError: (error) {
+        _addLog(
+          LogEntry(
+            level: LogLevel.error,
+            message: 'Log stream error: $error',
+            time: DateTime.now(),
+          ),
+        );
+      },
+    );
 
     // Connection stream - every open/close event
     _connectionSubscription = client.connectionStream.listen(
       (conns) {
-        // Index by id once per batch instead of scanning the whole list for
-        // every event: the core emits dozens of events per second.
-        var indexes = <String, int>{
-          for (var i = 0; i < _connections.length; i++)
-            _connections[i].id: i,
-        };
+        // Find new connections not in our list
+        final existingIds = _connections.map((c) => c.id).toSet();
         for (final conn in conns) {
-          final idx = indexes[conn.id];
-          if (idx != null) {
-            _connections[idx] = conn;
-            continue;
-          }
-          final before = _connections.length;
-          _addConnection(conn);
-          if (_connections.length <= before) {
-            // The ring buffer dropped old entries, so indexes shifted.
-            indexes = <String, int>{
-              for (var i = 0; i < _connections.length; i++)
-                _connections[i].id: i,
-            };
+          if (!existingIds.contains(conn.id)) {
+            _addConnection(conn);
           } else {
-            indexes[conn.id] = _connections.length - 1;
+            // Update existing (e.g., bytes, closedAt)
+            final idx = _connections.indexWhere((c) => c.id == conn.id);
+            if (idx >= 0) {
+              _connections[idx] = conn;
+            }
           }
         }
-        final now = DateTime.now();
-        if (now.difference(_lastConnectionNotify) >=
-            const Duration(milliseconds: 500)) {
-          _lastConnectionNotify = now;
-          notifyListeners();
-        }
+        _scheduleNotify();
       },
       onError: (error) {
         _addLog(
@@ -203,10 +183,11 @@ class VpnController extends ChangeNotifier {
             time: DateTime.now(),
           ),
         );
+        _scheduleNotify();
       },
     );
 
-    notifyListeners();
+    _scheduleNotify(immediate: true);
   }
 
   void _addLog(LogEntry entry) {
@@ -276,8 +257,7 @@ class VpnController extends ChangeNotifier {
     if (_connections.length > _maxConnectionEntries) {
       _connections.removeRange(0, _connections.length - _maxConnectionEntries);
     }
-    if (!_captureCoreLogs) return;
-    // Mirror connection events into the journal only in diagnostics mode.
+    // Also log connection events
     _addLog(
       LogEntry(
         level: LogLevel.info,
@@ -287,6 +267,23 @@ class VpnController extends ChangeNotifier {
         time: DateTime.now(),
       ),
     );
+  }
+
+  void _scheduleNotify({bool immediate = false}) {
+    if (immediate) {
+      _uiNotifyTimer?.cancel();
+      _uiNotifyTimer = null;
+      _uiNotifyPending = false;
+      notifyListeners();
+      return;
+    }
+    if (_uiNotifyPending) return;
+    _uiNotifyPending = true;
+    _uiNotifyTimer = Timer(const Duration(milliseconds: 250), () {
+      _uiNotifyPending = false;
+      _uiNotifyTimer = null;
+      notifyListeners();
+    });
   }
 
   void setLogFilterLevel(LogLevel level) {
@@ -607,6 +604,7 @@ class VpnController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _uiNotifyTimer?.cancel();
     _stateSubscription?.cancel();
     _faultSubscription?.cancel();
     _trafficSubscription?.cancel();

@@ -59,7 +59,8 @@ class _LogViewerScreenState extends State<LogViewerScreen>
           ],
         ),
         actions: [
-          if (_tabController.index == 0) _LogFilterMenu(controller: widget.controller),
+          if (_tabController.index == 0)
+            _LogFilterMenu(controller: widget.controller),
           IconButton(
             tooltip: 'Экспорт',
             icon: const Icon(Icons.download),
@@ -78,10 +79,7 @@ class _LogViewerScreenState extends State<LogViewerScreen>
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: [
-                _buildLogList(),
-                _buildConnectionList(),
-              ],
+              children: [_buildLogList(), _buildConnectionList()],
             ),
           ),
         ],
@@ -107,10 +105,11 @@ class _LogViewerScreenState extends State<LogViewerScreen>
                 )
               : null,
           isDense: true,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 8,
           ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         ),
       ),
     );
@@ -135,7 +134,9 @@ class _LogViewerScreenState extends State<LogViewerScreen>
   Widget _buildConnectionList() {
     final entries = widget.controller.connections;
     if (entries.isEmpty) {
-      return const Center(child: Text('Соединений пока нет. Подключитесь к VPN.'));
+      return const Center(
+        child: Text('Соединений пока нет. Подключитесь к VPN.'),
+      );
     }
     return ListView.builder(
       controller: _connectionScrollController,
@@ -150,10 +151,16 @@ class _LogViewerScreenState extends State<LogViewerScreen>
   void _exportCurrentTab() {
     if (_tabController.index == 0) {
       final text = widget.controller.exportLogs(filtered: true);
-      _shareText(text, 'viva_logs_${DateTime.now().millisecondsSinceEpoch}.txt');
+      _shareText(
+        text,
+        'viva_logs_${DateTime.now().millisecondsSinceEpoch}.txt',
+      );
     } else {
       final csv = widget.controller.exportConnectionsCsv();
-      _shareText(csv, 'viva_connections_${DateTime.now().millisecondsSinceEpoch}.csv');
+      _shareText(
+        csv,
+        'viva_connections_${DateTime.now().millisecondsSinceEpoch}.csv',
+      );
     }
   }
 
@@ -168,9 +175,8 @@ class _LogViewerScreenState extends State<LogViewerScreen>
   Future<void> _shareText(String text, String filename) async {
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Скопировано: $filename')),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Скопировано: $filename')));
   }
 }
 
@@ -216,7 +222,11 @@ class _LevelColorDot extends StatelessWidget {
       LogLevel.fatal => Colors.deepOrange,
       LogLevel.panic => Colors.purple,
     };
-    return Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle));
+    return Container(
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    );
   }
 }
 
@@ -234,7 +244,8 @@ class _LogEntryTile extends StatelessWidget {
       LogLevel.info => isDark ? Colors.green[300] : Colors.green[700],
       LogLevel.warn => isDark ? Colors.orange[300] : Colors.orange[700],
       LogLevel.error => isDark ? Colors.red[300] : Colors.red[700],
-      LogLevel.fatal => isDark ? Colors.deepOrange[300] : Colors.deepOrange[700],
+      LogLevel.fatal =>
+        isDark ? Colors.deepOrange[300] : Colors.deepOrange[700],
       LogLevel.panic => isDark ? Colors.purple[300] : Colors.purple[700],
     };
 
@@ -242,10 +253,7 @@ class _LogEntryTile extends StatelessWidget {
       color: color?.withValues(alpha: 0.05),
       child: ListTile(
         dense: true,
-        leading: Container(
-          width: 4,
-          color: color,
-        ),
+        leading: Container(width: 4, color: color),
         title: Text(
           entry.message,
           style: theme.textTheme.bodySmall?.copyWith(
@@ -270,9 +278,9 @@ class _LogEntryTile extends StatelessWidget {
 
   void _copyToClipboard(BuildContext context, String text) {
     Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Скопировано в буфер обмена')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Скопировано в буфер обмена')));
   }
 }
 
@@ -284,7 +292,8 @@ class _ConnectionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isActive = conn.isActive;
-    final isProxy = conn.outboundType == 'vless' || conn.outbound.contains('proxy');
+    final isProxy =
+        conn.outboundType == 'vless' || conn.outbound.contains('proxy');
     final isDirect = conn.outboundType == 'direct' || conn.outbound == 'direct';
 
     Color statusColor;
@@ -334,15 +343,29 @@ class _ConnectionTile extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: (isProxy ? Colors.blue : isDirect ? Colors.green : Colors.orange).withValues(alpha: 0.2),
+                color:
+                    (isProxy
+                            ? Colors.blue
+                            : isDirect
+                            ? Colors.green
+                            : Colors.orange)
+                        .withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
-                isProxy ? 'PROXY' : isDirect ? 'DIRECT' : 'OTHER',
+                isProxy
+                    ? 'PROXY'
+                    : isDirect
+                    ? 'DIRECT'
+                    : 'OTHER',
                 style: theme.textTheme.labelSmall?.copyWith(
                   fontSize: 9,
                   fontWeight: FontWeight.bold,
-                  color: isProxy ? Colors.blue : isDirect ? Colors.green : Colors.orange,
+                  color: isProxy
+                      ? Colors.blue
+                      : isDirect
+                      ? Colors.green
+                      : Colors.orange,
                 ),
               ),
             ),
@@ -364,15 +387,27 @@ class _ConnectionTile extends StatelessWidget {
                 _DetailRow('ID', conn.id),
                 _DetailRow('Правило', conn.rule.isEmpty ? '—' : conn.rule),
                 _DetailRow('Inbound', '${conn.inbound} (${conn.inboundType})'),
-                _DetailRow('Outbound', '${conn.outbound} (${conn.outboundType})'),
+                _DetailRow(
+                  'Outbound',
+                  '${conn.outbound} (${conn.outboundType})',
+                ),
                 _DetailRow('Источник', conn.source),
                 _DetailRow('Назначение', conn.destination),
                 _DetailRow('Домен', conn.domain.isEmpty ? '—' : conn.domain),
-                _DetailRow('Протокол', conn.protocol.isEmpty ? '—' : conn.protocol),
+                _DetailRow(
+                  'Протокол',
+                  conn.protocol.isEmpty ? '—' : conn.protocol,
+                ),
                 _DetailRow('Пользователь', conn.user.isEmpty ? '—' : conn.user),
                 _DetailRow('Открыто', conn.createdAt.toLocal().toString()),
-                _DetailRow('Закрыто', conn.closedAt?.toLocal().toString() ?? 'активно'),
-                _DetailRow('Трафик', '↑ ${_formatBytes(conn.uplinkTotalBytes)}  ↓ ${_formatBytes(conn.downlinkTotalBytes)}'),
+                _DetailRow(
+                  'Закрыто',
+                  conn.closedAt?.toLocal().toString() ?? 'активно',
+                ),
+                _DetailRow(
+                  'Трафик',
+                  '↑ ${_formatBytes(conn.uplinkTotalBytes)}  ↓ ${_formatBytes(conn.downlinkTotalBytes)}',
+                ),
                 if (conn.packageName != null)
                   _DetailRow('Пакет', conn.packageName!),
               ],
@@ -386,7 +421,8 @@ class _ConnectionTile extends StatelessWidget {
   String _formatBytes(int bytes) {
     if (bytes < 1024) return '${bytes}B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)}KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
+    if (bytes < 1024 * 1024 * 1024)
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)}GB';
   }
 }
