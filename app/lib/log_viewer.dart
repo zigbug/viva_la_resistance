@@ -118,6 +118,17 @@ class _LogViewerScreenState extends State<LogViewerScreen>
   Widget _buildLogList() {
     final entries = widget.controller.filteredLogs;
     if (entries.isEmpty) {
+      if (!widget.controller.diagnosticsEnabled) {
+        return const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'Диагностика выключена.\nВключите «Диагностика и логи» в расширенных настройках, затем переподключите VPN для сбора логов ядра.',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        );
+      }
       return const Center(child: Text('Логов пока нет. Подключитесь к VPN.'));
     }
     return ListView.builder(
@@ -134,6 +145,17 @@ class _LogViewerScreenState extends State<LogViewerScreen>
   Widget _buildConnectionList() {
     final entries = widget.controller.connections;
     if (entries.isEmpty) {
+      if (!widget.controller.diagnosticsEnabled) {
+        return const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'Диагностика выключена.\nВключите «Диагностика и логи» в расширенных настройках, чтобы видеть соединения.',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        );
+      }
       return const Center(
         child: Text('Соединений пока нет. Подключитесь к VPN.'),
       );

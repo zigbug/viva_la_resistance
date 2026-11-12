@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:viva_la_resistance/app_config.dart';
 import 'package:viva_la_resistance/config_builder.dart';
 
@@ -42,6 +43,19 @@ void main() {
     expect(rules[1]['protocol'], 'dns');
     expect(rules[1]['action'], 'hijack-dns');
 
+    final quicReject = rules.firstWhere(
+      (r) => r['protocol'] == 'quic' && r['action'] == 'reject',
+    );
+    expect(quicReject['rule_set'], contains('geosite-youtube'));
+
+    final proxyRule = rules.firstWhere(
+      (r) =>
+          r['outbound'] == 'proxy' &&
+          r['rule_set'] is List &&
+          (r['rule_set'] as List).contains('geosite-youtube'),
+    );
+    expect(proxyRule['rule_set'], contains('geosite-instagram'));
+
     final ruleSets = (route['rule_set'] as List).cast<Map>();
     expect(ruleSets.map((item) => item['tag']), [
       'geosite-youtube',
@@ -49,8 +63,31 @@ void main() {
     ]);
     expect(
       ruleSets.first['path'],
-      '/tmp/engine/working/rule-sets/geosite-youtube.srs',
+      p.join('/tmp/engine/working', 'rule-sets', 'geosite-youtube.srs'),
     );
+
+    final dns = root['dns'] as Map<String, dynamic>;
+    // Stealth: avoid leaking unrelated DNS in plaintext; proxy is final.
+    expect(dns['final'], 'dns-proxy');
+    final dnsRules = (dns['rules'] as List).cast<Map>();
+    expect(dnsRules.any((r) => r['rule_set'] == 'geosite-youtube'), isTrue);
+
+    final inbound = (root['inbounds'] as List).first as Map;
+    expect(inbound['mtu'], 1400);
+  });
+
+  test('core logs can be enabled explicitly', () {
+    final content = ConfigBuilder.build(
+      config: _config(),
+      services: {ServiceId.youtube},
+      mode: TunnelMode.apps,
+      workingPath: '/tmp/engine/working',
+      enableCoreLogs: true,
+    );
+    final root = jsonDecode(content) as Map<String, dynamic>;
+    final log = root['log'] as Map<String, dynamic>;
+    expect(log['level'], 'debug');
+    expect(log['disabled'], isNull);
   });
 
   test('app mode proxies all traffic and has no rule sets', () {
@@ -66,5 +103,6 @@ void main() {
     expect(route['final'], 'proxy');
     expect(route.containsKey('rule_set'), isFalse);
     expect((root['dns'] as Map)['final'], 'dns-proxy');
+    expect((root['log'] as Map)['disabled'], isTrue);
   });
 }

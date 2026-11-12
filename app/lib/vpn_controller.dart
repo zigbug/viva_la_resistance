@@ -1,22 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_singbox_client/flutter_singbox_client.dart';
+import 'package:path/path.dart' as p;
 
 import 'app_config.dart';
 import 'config_builder.dart';
 import 'engine_paths.dart';
 import 'rule_sets.dart';
-
-/// Core logs are only useful while checking that the tunnel works. They are
-/// high volume (hundreds of entries per second on active traffic) and each
-/// entry costs a platform-channel hop plus a Dart allocation, which is enough
-/// to stall low-end TV boxes. The core itself is also configured with logging
-/// disabled, so this subscription is normally never created.
-///
-/// Enable both sides with: `flutter run --dart-define=VIVA_CORE_LOGS=true`.
-final bool _captureCoreLogs = const bool.fromEnvironment('VIVA_CORE_LOGS');
 
 /// Maximum number of log entries to keep in memory.
 const int _maxLogEntries = 2000;
@@ -43,6 +37,8 @@ class VpnController extends ChangeNotifier {
   TrafficStats _traffic = TrafficStats.zero;
   String? _coreVersion;
 
+  bool _diagnosticsEnabled = ConfigBuilder.enableCoreLogsByDefault;
+
   final List<LogEntry> _logs = [];
   final List<ConnectionInfo> _connections = [];
   LogLevel _logFilterLevel = LogLevel.info;
@@ -64,6 +60,7 @@ class VpnController extends ChangeNotifier {
   String? get error => _error;
   TrafficStats get traffic => _traffic;
   String? get coreVersion => _coreVersion;
+  bool get diagnosticsEnabled => _diagnosticsEnabled;
 
   /// All captured log entries (newest first).
   List<LogEntry> get logs => List.unmodifiable(_logs.reversed.toList());
@@ -97,6 +94,8 @@ class VpnController extends ChangeNotifier {
     if (_services.isEmpty) {
       _services = ServiceId.values.toSet();
     }
+
+    await _loadSettings();
 
     try {
       _state = await client.getServiceState();
@@ -138,9 +137,77 @@ class VpnController extends ChangeNotifier {
       _scheduleNotify();
     });
 
+    _syncDiagnosticsSubscriptions();
+    _scheduleNotify(immediate: true);
+  }
+
+  File get _settingsFile => File(p.join(paths.base, 'settings.json'));
+
+  Future<void> _loadSettings() async {
+    try {
+      final file = _settingsFile;
+      if (!await file.exists()) return;
+      final raw = await file.readAsString();
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        final v = decoded['diagnosticsEnabled'];
+        if (v is bool) _diagnosticsEnabled = v;
+      }
+    } catch (_) {
+      // Ignore malformed settings; keep defaults.
+    }
+  }
+
+  Future<void> _saveSettings() async {
+    try {
+      final file = _settingsFile;
+      await file.parent.create(recursive: true);
+      await file.writeAsString(
+        jsonEncode({'diagnosticsEnabled': _diagnosticsEnabled}),
+      );
+    } catch (_) {
+      // Best-effort persistence.
+    }
+  }
+
+  Future<void> setDiagnosticsEnabled(bool enabled) async {
+    if (_diagnosticsEnabled == enabled) return;
+    _diagnosticsEnabled = enabled;
+    if (!enabled) {
+      _logSubscription?.cancel();
+      _logSubscription = null;
+      _connectionSubscription?.cancel();
+      _connectionSubscription = null;
+      _logs.clear();
+      _connections.clear();
+    } else {
+      _syncDiagnosticsSubscriptions();
+      _addLog(
+        LogEntry(
+          level: LogLevel.info,
+          message:
+              'Диагностика включена. Для подробных логов ядра переподключите VPN.',
+          time: DateTime.now(),
+        ),
+      );
+    }
+    await _saveSettings();
+    _scheduleNotify(immediate: true);
+  }
+
+  void _syncDiagnosticsSubscriptions() {
+    if (!_diagnosticsEnabled) {
+      _logSubscription?.cancel();
+      _logSubscription = null;
+      _connectionSubscription?.cancel();
+      _connectionSubscription = null;
+      return;
+    }
+
     // Core log stream - high volume, batched
-    _logSubscription = client.coreLogStream.listen(
+    _logSubscription ??= client.coreLogStream.listen(
       (entries) {
+        if (!_diagnosticsEnabled) return;
         for (final entry in entries) {
           _addLog(entry);
         }
@@ -158,8 +225,9 @@ class VpnController extends ChangeNotifier {
     );
 
     // Connection stream - every open/close event
-    _connectionSubscription = client.connectionStream.listen(
+    _connectionSubscription ??= client.connectionStream.listen(
       (conns) {
+        if (!_diagnosticsEnabled) return;
         // Find new connections not in our list
         final existingIds = _connections.map((c) => c.id).toSet();
         for (final conn in conns) {
@@ -186,11 +254,10 @@ class VpnController extends ChangeNotifier {
         _scheduleNotify();
       },
     );
-
-    _scheduleNotify(immediate: true);
   }
 
   void _addLog(LogEntry entry) {
+    if (!_diagnosticsEnabled) return;
     _logs.add(entry);
     if (_logs.length > _maxLogEntries) {
       _logs.removeRange(0, _logs.length - _maxLogEntries);
@@ -200,6 +267,9 @@ class VpnController extends ChangeNotifier {
       _logs.add(
         LogEntry(level: LogLevel.warn, message: hint, time: DateTime.now()),
       );
+      if (_logs.length > _maxLogEntries) {
+        _logs.removeRange(0, _logs.length - _maxLogEntries);
+      }
     }
   }
 
@@ -253,6 +323,7 @@ class VpnController extends ChangeNotifier {
   }
 
   void _addConnection(ConnectionInfo conn) {
+    if (!_diagnosticsEnabled) return;
     _connections.add(conn);
     if (_connections.length > _maxConnectionEntries) {
       _connections.removeRange(0, _connections.length - _maxConnectionEntries);
@@ -443,6 +514,7 @@ class VpnController extends ChangeNotifier {
         services: _services,
         mode: _mode,
         workingPath: paths.working,
+        enableCoreLogs: _diagnosticsEnabled,
       );
 
       _addLog(

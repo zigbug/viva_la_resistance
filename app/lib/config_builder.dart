@@ -25,18 +25,17 @@ extension TunnelModeInfo on TunnelMode {
 class ConfigBuilder {
   const ConfigBuilder._();
 
-  /// Core logging is switched off: the tunnel is verified, and on low-end
-  /// hardware a debug log firehose costs more than the tunnel itself. Enable it
-  /// together with `_captureCoreLogs` in vpn_controller.dart via
-  /// `--dart-define=VIVA_CORE_LOGS=true`.
-  static final bool enableCoreLogs =
-      const bool.fromEnvironment('VIVA_CORE_LOGS');
+  /// Сборка-time override: `--dart-define=VIVA_CORE_LOGS=true` включает
+  /// подробные логи ядра по умолчанию (до переключения в настройках).
+  static const bool enableCoreLogsByDefault =
+      bool.fromEnvironment('VIVA_CORE_LOGS');
 
   static String build({
     required AppConfig config,
     required Set<ServiceId> services,
     required TunnelMode mode,
     required String workingPath,
+    bool enableCoreLogs = false,
   }) {
     final ruleSets = <Map<String, Object?>>[];
     final routeRules = <Map<String, Object?>>[
@@ -59,8 +58,17 @@ class ConfigBuilder {
         });
         dnsRules.add({'rule_set': service.ruleSetTag, 'server': 'dns-proxy'});
       }
+      final tags = services.map((service) => service.ruleSetTag).toList();
+      // QUIC/HTTP3 часто мешает контролируемой маршрутизации и даёт лишние
+      // утечки/особенности поведения; для целевых доменов блокируем QUIC,
+      // чтобы клиенты фолбэчились на TCP через туннель.
       routeRules.add({
-        'rule_set': services.map((service) => service.ruleSetTag).toList(),
+        'protocol': 'quic',
+        'rule_set': tags,
+        'action': 'reject',
+      });
+      routeRules.add({
+        'rule_set': tags,
         'outbound': 'proxy',
       });
     }
@@ -77,7 +85,10 @@ class ConfigBuilder {
           'detour': 'proxy',
         },
       ],
-      'final': mode == TunnelMode.domains ? 'dns-direct' : 'dns-proxy',
+      // В stealth-сценарии предпочитаем резолвить нецелевые домены тоже через
+      // туннель, чтобы меньше светить plaintext DNS наружу. Bootstrap прокси
+      // использует IP-адрес сервера, поэтому петли резолвинга нет.
+      'final': 'dns-proxy',
       'strategy': 'prefer_ipv4',
     };
     if (dnsRules.isNotEmpty) {
@@ -128,7 +139,9 @@ class ConfigBuilder {
           'type': 'tun',
           'tag': 'tun-in',
           'address': ['172.19.0.1/30', 'fdfe:dcba:9876::1/126'],
-          'mtu': 9000,
+          // 9000 (jumbo) часто даёт проблемы/фрагментацию на мобильных сетях;
+          // консервативный MTU стабильнее.
+          'mtu': 1400,
           'auto_route': true,
           'strict_route': false,
           'stack': 'mixed',
