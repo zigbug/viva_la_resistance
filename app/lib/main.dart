@@ -4,6 +4,7 @@ import 'package:flutter_singbox_client/flutter_singbox_client.dart';
 import 'app_config.dart';
 import 'engine_paths.dart';
 import 'home_screen.dart';
+import 'server_setup_screen.dart';
 import 'vpn_controller.dart';
 
 Future<void> main() async {
@@ -19,8 +20,22 @@ Future<void> main() async {
         tempPath: paths.temp,
       ),
     );
-    final config = await AppConfig.load();
-    runApp(VivaApp(client: client, paths: paths, config: config));
+    try {
+      final config = await AppConfig.load(basePath: paths.base);
+      runApp(VivaApp(
+        client: client,
+        paths: paths,
+        initialConfig: config,
+        needsServerSetup: false,
+      ));
+    } on ServerConfigRequired catch (e) {
+      runApp(VivaApp(
+        client: client,
+        paths: paths,
+        initialConfig: e.config,
+        needsServerSetup: true,
+      ));
+    }
   } catch (error) {
     runApp(StartupErrorApp(message: _describeError(error)));
   }
@@ -28,6 +43,9 @@ Future<void> main() async {
 
 String _describeError(Object error) {
   if (error is ConfigException) {
+    return error.message;
+  }
+  if (error is ServerConfigRequired) {
     return error.message;
   }
   final text = error.toString();
@@ -40,12 +58,14 @@ class VivaApp extends StatefulWidget {
     super.key,
     required this.client,
     required this.paths,
-    required this.config,
+    required this.initialConfig,
+    required this.needsServerSetup,
   });
 
   final SingboxClient client;
   final EnginePaths paths;
-  final AppConfig config;
+  final AppConfig initialConfig;
+  final bool needsServerSetup;
 
   @override
   State<VivaApp> createState() => _VivaAppState();
@@ -53,14 +73,16 @@ class VivaApp extends StatefulWidget {
 
 class _VivaAppState extends State<VivaApp> {
   late final VpnController _controller;
+  late bool _needsServerSetup;
 
   @override
   void initState() {
     super.initState();
+    _needsServerSetup = widget.needsServerSetup;
     _controller = VpnController(
       client: widget.client,
       paths: widget.paths,
-      config: widget.config,
+      config: widget.initialConfig,
     );
   }
 
@@ -78,7 +100,7 @@ class _VivaAppState extends State<VivaApp> {
     );
 
     return MaterialApp(
-      title: widget.config.name,
+      title: widget.initialConfig.name,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: scheme,
@@ -97,7 +119,13 @@ class _VivaAppState extends State<VivaApp> {
           ),
         ),
       ),
-      home: HomeScreen(controller: _controller),
+      home: _needsServerSetup
+          ? ServerSetupScreen(
+              controller: _controller,
+              requiredSetup: true,
+              onConfigured: () => setState(() => _needsServerSetup = false),
+            )
+          : HomeScreen(controller: _controller),
     );
   }
 }

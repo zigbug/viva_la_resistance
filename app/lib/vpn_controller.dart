@@ -27,7 +27,12 @@ class VpnController extends ChangeNotifier {
 
   final SingboxClient client;
   final EnginePaths paths;
-  final AppConfig config;
+  AppConfig config;
+
+  void updateConfig(AppConfig newConfig) {
+    config = newConfig;
+    notifyListeners();
+  }
 
   ServiceState _state = ServiceState.stopped;
   Set<ServiceId> _services = <ServiceId>{};
