@@ -10,12 +10,7 @@ import dev.amirzr.singbox.command.SingboxCommandClient
 import dev.amirzr.singbox.service.SessionOptions
 import dev.amirzr.singbox.service.SingboxProxyService
 import dev.amirzr.singbox.service.SingboxVPNService
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -79,7 +74,6 @@ class SingboxManager(private val context: Context) {
 
     // ── Internals ─────────────────────────────────────────────────────────────
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var commandClient: SingboxCommandClient? = null
 
     // ── Service lifecycle ─────────────────────────────────────────────────────
@@ -139,7 +133,6 @@ class SingboxManager(private val context: Context) {
 
     fun dispose() {
         disconnectCommandClient()
-        scope.cancel()
         synchronized(Companion) { _instance = null }
     }
 
@@ -183,34 +176,32 @@ class SingboxManager(private val context: Context) {
         }
 
         override fun onStatus(stats: Map<String, Any>) {
-            scope.launch { _trafficStats.emit(stats) }
+            _trafficStats.tryEmit(stats)
         }
 
         override fun onLogs(entries: List<Map<String, Any>>) {
-            scope.launch { _logs.emit(entries) }
+            _logs.tryEmit(entries)
         }
 
         override fun onGroups(groups: List<Map<String, Any>>) {
-            scope.launch { _groups.emit(groups) }
+            _groups.tryEmit(groups)
         }
 
         override fun onConnections(conns: List<Map<String, Any>>) {
-            scope.launch { _connections.emit(conns) }
+            _connections.tryEmit(conns)
         }
 
         override fun onClashModes(modes: List<String>, current: String) {
-            scope.launch {
-                _clashModes.emit(modes)
-                _clashMode.emit(current)
-            }
+            _clashModes.tryEmit(modes)
+            _clashMode.tryEmit(current)
         }
 
         override fun onClashModeChanged(mode: String) {
-            scope.launch { _clashMode.emit(mode) }
+            _clashMode.tryEmit(mode)
         }
 
         override fun onAlert(message: String) {
-            scope.launch { _alerts.emit(message) }
+            _alerts.tryEmit(message)
         }
     }
 
@@ -271,7 +262,7 @@ class SingboxManager(private val context: Context) {
     }
 
     fun notifyAlert(message: String) {
-        scope.launch { _alerts.emit(message) }
+        _alerts.tryEmit(message)
     }
 
 }
