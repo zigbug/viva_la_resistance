@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_singbox_client/flutter_singbox_client.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:update_from_server/update_from_server.dart';
 
 import 'app_config.dart';
 import 'config_builder.dart';
@@ -23,6 +25,29 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     controller.init();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkForUpdate();
+    });
+  }
+
+  Future<void> _checkForUpdate() async {
+    try {
+      final client = OtaClient(
+        baseUrl: 'https://updates.905911.ru:8450',
+        appKey: 'viva_la_resistance',
+      );
+      try {
+        await checkAndPromptUpdate(
+          context,
+          client: client,
+          channel: 'stable',
+        );
+      } finally {
+        client.close();
+      }
+    } catch (_) {
+      // Silent: update check must not break the app.
+    }
   }
 
   @override
