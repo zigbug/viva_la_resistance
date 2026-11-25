@@ -42,6 +42,17 @@ class DefaultNetworkMonitor(context: Context) {
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    // A single worker thread: the checks below may sleep up to a second, and
+    // connectivity callbacks can fire in bursts. Spawning a raw Thread per
+    // callback churns the scheduler on low-end devices.
+    private val worker = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "DefaultNetworkMonitor").apply { isDaemon = true }
+    }
+
+    private fun submit(block: () -> Unit) {
+        runCatching { worker.execute(block) }
+    }
+
     @Volatile private var currentNetwork: Network? = null
     @Volatile private var listener: InterfaceUpdateListener? = null
 
@@ -54,7 +65,7 @@ class DefaultNetworkMonitor(context: Context) {
         override fun onAvailable(network: Network) {
             currentNetwork = network
             // Run on background thread — checkDefaultInterfaceUpdate may sleep during retries.
-            Thread { checkDefaultInterfaceUpdate(network) }.start()
+            submit { checkDefaultInterfaceUpdate(network) }
         }
 
         override fun onLost(network: Network) {
@@ -63,11 +74,11 @@ class DefaultNetworkMonitor(context: Context) {
         }
 
         override fun onLinkPropertiesChanged(network: Network, lp: LinkProperties) {
-            Thread { checkDefaultInterfaceUpdate(network, lp) }.start()
+            submit { checkDefaultInterfaceUpdate(network, lp) }
         }
 
         override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
-            Thread { checkDefaultInterfaceUpdate(network) }.start()
+            submit { checkDefaultInterfaceUpdate(network) }
         }
     }
 
@@ -105,6 +116,7 @@ class DefaultNetworkMonitor(context: Context) {
         listener = null
         currentNetwork = null
         runCatching { connectivityManager.unregisterNetworkCallback(networkCallback) }
+        worker.shutdownNow()
     }
 
     private fun register() {

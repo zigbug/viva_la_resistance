@@ -76,12 +76,12 @@ class SingboxProxyService : Service(), BoxPlatformInterface {
         stopping = true
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopScope.launch {
-            networkMonitor?.stopMonitoring()
+            runCatching { networkMonitor?.stopMonitoring() }
             networkMonitor = null
-            helper?.stop()
+            runCatching { helper?.stop() }
             helper = null
-            manager.notifyServiceState(SingboxConstants.STATE_STOPPED)
-            withContext(Dispatchers.Main) { stopSelf() }
+            runCatching { manager.notifyServiceState(SingboxConstants.STATE_STOPPED) }
+            withContext(Dispatchers.Main) { runCatching { stopSelf() } }
         }
     }
 
@@ -89,11 +89,11 @@ class SingboxProxyService : Service(), BoxPlatformInterface {
         if (!stopping) {
             stopping = true
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-            networkMonitor?.stopMonitoring()
+            runCatching { networkMonitor?.stopMonitoring() }
             networkMonitor = null
-            helper?.stop()
+            runCatching { helper?.stop() }
             helper = null
-            manager.notifyServiceState(SingboxConstants.STATE_STOPPED)
+            runCatching { manager.notifyServiceState(SingboxConstants.STATE_STOPPED) }
         }
         stopScope.cancel()
         instance = null

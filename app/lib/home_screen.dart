@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_singbox_client/flutter_singbox_client.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:update_from_server/update_from_server.dart';
 
 import 'app_config.dart';
 import 'config_builder.dart';
 import 'log_viewer.dart';
+import 'server_setup_screen.dart';
 import 'vpn_controller.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -22,6 +25,29 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     controller.init();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkForUpdate();
+    });
+  }
+
+  Future<void> _checkForUpdate() async {
+    try {
+      final client = OtaClient(
+        baseUrl: 'https://updates.905911.ru:8450',
+        appKey: 'viva_la_resistance',
+      );
+      try {
+        await checkAndPromptUpdate(
+          context,
+          client: client,
+          channel: 'stable',
+        );
+      } finally {
+        client.close();
+      }
+    } catch (_) {
+      // Silent: update check must not break the app.
+    }
   }
 
   @override
@@ -324,9 +350,46 @@ class _AdvancedCard extends StatelessWidget {
               ),
             ),
           const Divider(height: 28),
-          _InfoRow(label: 'Сервер', value: controller.config.serverName),
-          const SizedBox(height: 6),
-          _InfoRow(label: 'Порт', value: controller.config.port.toString()),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: controller.diagnosticsEnabled,
+            onChanged: (value) => controller.setDiagnosticsEnabled(value),
+            title: const Text('Диагностика и логи'),
+            subtitle: Text(
+              controller.isRunning
+                  ? 'Подробные логи ядра применятся при следующем подключении'
+                  : 'Сбор логов и соединений для отладки (нагружает устройство)',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            secondary: const Icon(Icons.bug_report_outlined),
+          ),
+          const Divider(height: 28),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.dns_outlined),
+            title: const Text('Сервер (VPS)'),
+            subtitle: Text(
+              controller.config.serverName.isEmpty
+                  ? 'Не настроен'
+                  : '${controller.config.serverName}:${controller.config.port}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ServerSetupScreen(
+                    controller: controller,
+                    requiredSetup: false,
+                  ),
+                ),
+              );
+            },
+          ),
           if (controller.coreVersion != null) ...[
             const SizedBox(height: 6),
             _InfoRow(label: 'Ядро sing-box', value: controller.coreVersion!),

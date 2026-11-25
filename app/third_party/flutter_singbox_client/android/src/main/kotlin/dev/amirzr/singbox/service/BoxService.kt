@@ -86,7 +86,7 @@ class BoxService(
         runCatching { commandServer?.closeService() }
         runCatching { commandServer?.close() }
         commandServer = null
-        scope.cancel()
+        runCatching { scope.cancel() }
     }
 
     private fun buildOverrideOptions(): OverrideOptions {
