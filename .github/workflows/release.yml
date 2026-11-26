@@ -2,7 +2,7 @@ name: build and upload release
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/ota-updates-ci]
   workflow_dispatch:
 
 env:
