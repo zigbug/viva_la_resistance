@@ -1,6 +1,14 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
+import 'app_config.dart';
 import 'vpn_controller.dart';
 import 'vps_setup_guide_screen.dart';
 
@@ -57,22 +65,36 @@ class _ServerSetupScreenState extends State<ServerSetupScreen> {
     super.dispose();
   }
 
+  AppConfig _draftFromForm() {
+    final port = int.tryParse(_port.text.trim());
+    return widget.controller.config.copyWithServer(
+      address: _address.text.trim(),
+      port: port ?? widget.controller.config.port,
+      uuid: _uuid.text.trim(),
+      flow: _flow.text.trim(),
+      serverName: _serverName.text.trim(),
+      realityPublicKey: _publicKey.text.trim(),
+      realityShortId: _shortId.text.trim(),
+    );
+  }
+
+  void _applyConfigToForm(AppConfig c) {
+    _address.text = c.address;
+    _port.text = c.port.toString();
+    _uuid.text = c.uuid;
+    _flow.text = c.flow;
+    _serverName.text = c.serverName;
+    _publicKey.text = c.realityPublicKey;
+    _shortId.text = c.realityShortId;
+  }
+
   Future<void> _save() async {
     setState(() {
       _saving = true;
       _error = null;
     });
     try {
-      final port = int.tryParse(_port.text.trim());
-      final draft = widget.controller.config.copyWithServer(
-        address: _address.text.trim(),
-        port: port ?? widget.controller.config.port,
-        uuid: _uuid.text.trim(),
-        flow: _flow.text.trim(),
-        serverName: _serverName.text.trim(),
-        realityPublicKey: _publicKey.text.trim(),
-        realityShortId: _shortId.text.trim(),
-      );
+      final draft = _draftFromForm();
       final err = draft.serverValidationError();
       if (err != null) {
         setState(() => _error = err);
@@ -91,6 +113,95 @@ class _ServerSetupScreenState extends State<ServerSetupScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<void> _exportConfig() async {
+    setState(() => _error = null);
+    try {
+      final draft = _draftFromForm();
+      final err = draft.serverValidationError();
+      if (err != null) {
+        setState(() => _error = 'Перед экспортом заполните конфиг: $err');
+        return;
+      }
+      final jsonText = const JsonEncoder.withIndent(
+        '  ',
+      ).convert(draft.toJson());
+      final dir = await getTemporaryDirectory();
+      final file = File(p.join(dir.path, 'viva_config.json'));
+      await file.writeAsString(jsonText);
+      await Share.shareXFiles([
+        XFile(
+          file.path,
+          mimeType: 'application/json',
+          name: 'viva_config.json',
+        ),
+      ], subject: 'Viva la Resistance config');
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Не удалось экспортировать: $e');
+    }
+  }
+
+  Future<void> _importConfig() async {
+    setState(() => _error = null);
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['json', 'txt', 'conf', 'config'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final picked = result.files.single;
+      String raw;
+      if (picked.bytes != null) {
+        raw = utf8.decode(picked.bytes!, allowMalformed: true);
+      } else if (picked.path != null) {
+        raw = await File(picked.path!).readAsString();
+      } else {
+        setState(() => _error = 'Не удалось прочитать файл.');
+        return;
+      }
+
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        setState(() => _error = 'Файл должен содержать JSON-объект.');
+        return;
+      }
+      final map = Map<String, dynamic>.from(decoded);
+      final imported = AppConfig.fromJson({
+        ...widget.controller.config.toJson(),
+        ...map,
+      });
+      final err = imported.serverValidationError();
+      if (err != null) {
+        setState(() => _error = 'Импортированный конфиг некорректен: $err');
+        return;
+      }
+      _applyConfigToForm(imported);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Конфиг импортирован. Нажмите «Сохранить».'),
+        ),
+      );
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Не удалось импортировать: $e');
+    }
+  }
+
+  Future<void> _copyConfig() async {
+    final draft = _draftFromForm();
+    final err = draft.serverValidationError();
+    if (err != null) {
+      setState(() => _error = 'Перед копированием заполните конфиг: $err');
+      return;
+    }
+    final jsonText = const JsonEncoder.withIndent('  ').convert(draft.toJson());
+    await Clipboard.setData(ClipboardData(text: jsonText));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('JSON скопирован в буфер обмена')),
+    );
   }
 
   @override
@@ -123,14 +234,18 @@ class _ServerSetupScreenState extends State<ServerSetupScreen> {
                   ),
                   const SizedBox(height: 16),
                   if (widget.requiredSetup) ...[
-                    Icon(Icons.dns_outlined,
-                        size: 56, color: theme.colorScheme.primary),
+                    Icon(
+                      Icons.dns_outlined,
+                      size: 56,
+                      color: theme.colorScheme.primary,
+                    ),
                     const SizedBox(height: 12),
                     Text(
                       'Настройка сервера',
                       textAlign: TextAlign.center,
-                      style: theme.textTheme.headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.w700),
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -152,38 +267,59 @@ class _ServerSetupScreenState extends State<ServerSetupScreen> {
                         ),
                       ),
                     ),
-                  _field(_address, 'Адрес сервера',
-                      hint: 'IP или домен VPS',
-                      icon: Icons.language,
-                      keyboard: TextInputType.url),
+                  _field(
+                    _address,
+                    'Адрес сервера',
+                    hint: 'IP или домен VPS',
+                    icon: Icons.language,
+                    keyboard: TextInputType.url,
+                  ),
                   const SizedBox(height: 12),
-                  _field(_port, 'Порт',
-                      hint: '443',
-                      icon: Icons.numbers,
-                      keyboard: TextInputType.number,
-                      formatters: [FilteringTextInputFormatter.digitsOnly]),
+                  _field(
+                    _port,
+                    'Порт',
+                    hint: '443',
+                    icon: Icons.numbers,
+                    keyboard: TextInputType.number,
+                    formatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
                   const SizedBox(height: 12),
-                  _field(_uuid, 'UUID',
-                      hint: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
-                      icon: Icons.fingerprint,
-                      keyboard: TextInputType.text),
+                  _field(
+                    _uuid,
+                    'UUID',
+                    hint: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+                    icon: Icons.fingerprint,
+                    keyboard: TextInputType.text,
+                  ),
                   const SizedBox(height: 12),
-                  _field(_flow, 'Flow',
-                      hint: 'xtls-rprx-vision',
-                      icon: Icons.route_outlined),
+                  _field(
+                    _flow,
+                    'Flow',
+                    hint: 'xtls-rprx-vision',
+                    icon: Icons.route_outlined,
+                  ),
                   const SizedBox(height: 12),
-                  _field(_serverName, 'SNI / server_name',
-                      hint: 'example.com',
-                      icon: Icons.badge_outlined,
-                      keyboard: TextInputType.url),
+                  _field(
+                    _serverName,
+                    'SNI / server_name',
+                    hint: 'example.com',
+                    icon: Icons.badge_outlined,
+                    keyboard: TextInputType.url,
+                  ),
                   const SizedBox(height: 12),
-                  _field(_publicKey, 'Reality public key',
-                      hint: 'публичный ключ',
-                      icon: Icons.vpn_key_outlined),
+                  _field(
+                    _publicKey,
+                    'Reality public key',
+                    hint: 'публичный ключ',
+                    icon: Icons.vpn_key_outlined,
+                  ),
                   const SizedBox(height: 12),
-                  _field(_shortId, 'Reality short id',
-                      hint: 'short id',
-                      icon: Icons.tag),
+                  _field(
+                    _shortId,
+                    'Reality short id',
+                    hint: 'short id',
+                    icon: Icons.tag,
+                  ),
                   if (_error != null) ...[
                     const SizedBox(height: 14),
                     Container(
@@ -194,8 +330,9 @@ class _ServerSetupScreenState extends State<ServerSetupScreen> {
                       ),
                       child: Text(
                         _error!,
-                        style:
-                            TextStyle(color: theme.colorScheme.onErrorContainer),
+                        style: TextStyle(
+                          color: theme.colorScheme.onErrorContainer,
+                        ),
                       ),
                     ),
                   ],
@@ -211,10 +348,38 @@ class _ServerSetupScreenState extends State<ServerSetupScreen> {
                         : const Icon(Icons.save_outlined),
                     label: const Text('Сохранить'),
                   ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _saving ? null : _importConfig,
+                          icon: const Icon(Icons.file_open_outlined),
+                          label: const Text('Импорт'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _saving ? null : _exportConfig,
+                          icon: const Icon(Icons.ios_share_outlined),
+                          label: const Text('Экспорт'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: _saving ? null : _copyConfig,
+                    icon: const Icon(Icons.copy_outlined),
+                    label: const Text('Копировать JSON'),
+                  ),
                   if (!widget.requiredSetup) ...[
                     const SizedBox(height: 8),
                     TextButton(
-                      onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+                      onPressed: _saving
+                          ? null
+                          : () => Navigator.of(context).pop(false),
                       child: const Text('Отмена'),
                     ),
                   ],
