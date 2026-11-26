@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_singbox_client/flutter_singbox_client.dart';
-import 'package:update_from_server/update_from_server.dart';
 
 import 'app_config.dart';
 import 'config_builder.dart';
 import 'log_viewer.dart';
 import 'server_setup_screen.dart';
+import 'update_check.dart';
 import 'vpn_controller.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -30,23 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _checkForUpdate() async {
-    try {
-      final client = OtaClient(
-        baseUrl: 'https://updates.905911.ru:8450',
-        appKey: 'viva_la_resistance',
-      );
-      try {
-        await checkAndPromptUpdate(
-          context,
-          client: client,
-          channel: 'stable',
-        );
-      } finally {
-        client.close();
-      }
-    } catch (_) {
-      // Silent: update check must not break the app.
-    }
+    await checkForAppUpdate(context);
   }
 
   @override
