@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_singbox_client/flutter_singbox_client.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:update_from_server/update_from_server.dart';
 
 import 'app_config.dart';
@@ -106,34 +105,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             ? _trafficLabel(controller.traffic)
                             : _offSubtitle(controller.mode),
                         active: connected,
-                      ),
-                      const SizedBox(height: 18),
-                      SizedBox(
-                        height: 56,
-                        child: FilledButton.icon(
-                          onPressed: transitioning ? null : controller.toggle,
-                          icon: transitioning
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2.4,
-                                  ),
-                                )
-                              : Icon(
-                                  connected
-                                      ? Icons.power_settings_new
-                                      : Icons.play_arrow_rounded,
-                                ),
-                          label: Text(
-                            transitioning
-                                ? 'Подождите…'
-                                : connected
-                                ? 'Отключить'
-                                : 'Подключить',
-                            style: const TextStyle(fontSize: 17),
-                          ),
-                        ),
+                        transitioning: transitioning,
+                        onTap: transitioning ? null : controller.toggle,
                       ),
                       if (controller.error != null) ...[
                         const SizedBox(height: 16),
@@ -189,6 +162,8 @@ class _StatusCard extends StatelessWidget {
     required this.status,
     required this.subtitle,
     required this.active,
+    required this.transitioning,
+    required this.onTap,
   });
 
   final IconData icon;
@@ -196,46 +171,72 @@ class _StatusCard extends StatelessWidget {
   final String status;
   final String subtitle;
   final bool active;
+  final bool transitioning;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: active ? color.withValues(alpha: 0.65) : theme.dividerColor,
-        ),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            color.withValues(alpha: active ? 0.22 : 0.08),
-            theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-          ],
-        ),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, size: 64, color: color),
-          const SizedBox(height: 12),
-          Text(
-            status,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w700,
+    final borderRadius = BorderRadius.circular(24);
+    return Material(
+      color: Colors.transparent,
+      borderRadius: borderRadius,
+      child: InkWell(
+        borderRadius: borderRadius,
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+          decoration: BoxDecoration(
+            borderRadius: borderRadius,
+            border: Border.all(
+              color: active ? color.withValues(alpha: 0.65) : theme.dividerColor,
+            ),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                color.withValues(alpha: active ? 0.22 : 0.08),
+                theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.35,
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            subtitle,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+          child: Column(
+            children: [
+              if (transitioning)
+                SizedBox(
+                  width: 64,
+                  height: 64,
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                      color: color,
+                    ),
+                  ),
+                )
+              else
+                Icon(icon, size: 64, color: color),
+              const SizedBox(height: 12),
+              Text(
+                transitioning ? 'Подождите…' : status,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
