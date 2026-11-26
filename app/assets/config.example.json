@@ -1,0 +1,14 @@
+{
+  "name": "Viva la Resistance",
+  "address": "YOUR_SERVER_IP_OR_DOMAIN",
+  "port": 443,
+  "uuid": "00000000-0000-0000-0000-000000000000",
+  "flow": "xtls-rprx-vision",
+  "server_name": "your-sni.example.com",
+  "reality_public_key": "YOUR_REALITY_PUBLIC_KEY",
+  "reality_short_id": "YOUR_SHORT_ID",
+  "services": {
+    "youtube": true,
+    "instagram": true
+  }
+}
