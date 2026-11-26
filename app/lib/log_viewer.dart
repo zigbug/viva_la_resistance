@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_singbox_client/flutter_singbox_client.dart';
 
+import 'update_check.dart';
 import 'vpn_controller.dart';
 
 class LogViewerScreen extends StatefulWidget {
@@ -61,6 +62,11 @@ class _LogViewerScreenState extends State<LogViewerScreen>
         actions: [
           if (_tabController.index == 0)
             _LogFilterMenu(controller: widget.controller),
+          IconButton(
+            tooltip: 'Проверить обновления',
+            icon: const Icon(Icons.system_update),
+            onPressed: () => checkForAppUpdate(context, manual: true),
+          ),
           IconButton(
             tooltip: 'Экспорт',
             icon: const Icon(Icons.download),
