@@ -40,7 +40,7 @@ dependencies:
   update_from_server:
     git:
       url: https://github.com/zigbug/update_from_server.git
-      ref: 3a32a5f
+      ref: 02c3d48
 
 
 dev_dependencies:
