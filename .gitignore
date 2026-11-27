@@ -17,6 +17,7 @@ local.properties
 *.jks
 *.keystore
 key.properties
+SIGNING_SECRETS_COPY.md
 
 # OS / editors
 .DS_Store
