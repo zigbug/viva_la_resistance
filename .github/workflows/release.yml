@@ -40,13 +40,20 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release.keystore
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release.keystore
           cat > android/key.properties <<EOF
           storePassword=$ANDROID_KEYSTORE_PASSWORD
           keyPassword=$ANDROID_KEY_PASSWORD
           keyAlias=$ANDROID_KEY_ALIAS
           storeFile=release.keystore
           EOF
+          echo "keystore_size=$(wc -c < android/app/release.keystore)"
+          echo "keystore_sha256=$(sha256sum android/app/release.keystore | cut -d' ' -f1)"
+          if keytool -list -keystore android/app/release.keystore -storepass "$ANDROID_KEYSTORE_PASSWORD" >/dev/null 2>&1; then
+            echo "keystore_check=OK"
+          else
+            echo "keystore_check=FAIL"
+          fi
 
       - name: Build release APK
         run: flutter build apk --release --android-skip-build-dependency-validation
