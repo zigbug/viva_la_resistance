@@ -53,6 +53,7 @@ class BoxService(
     private suspend fun startCore() {
         if (config.config.isBlank()) {
             manager.notifyAlert("No profile content provided")
+            ServiceConfigStore.clear(service.applicationContext)
             withContext(Dispatchers.Main) { service.stopSelf() }
             return
         }
@@ -62,6 +63,7 @@ class BoxService(
         } catch (e: Exception) {
             Log.e(TAG, "Core start failed", e)
             manager.notifyAlert("Core failed: ${e.message}")
+            ServiceConfigStore.clear(service.applicationContext)
             withContext(Dispatchers.Main) { service.stopSelf() }
             return
         }
@@ -104,6 +106,7 @@ class BoxService(
 
     override fun serviceStop() {
         Log.i(TAG, "serviceStop called by core")
+        ServiceConfigStore.clear(service.applicationContext)
         scope.launch(Dispatchers.Main) { service.stopSelf() }
     }
 

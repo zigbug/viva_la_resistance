@@ -7,6 +7,7 @@ import android.os.Build
 import android.util.Log
 import dev.amirzr.singbox.SingboxConstants
 import dev.amirzr.singbox.command.SingboxCommandClient
+import dev.amirzr.singbox.service.ServiceConfigStore
 import dev.amirzr.singbox.service.SessionOptions
 import dev.amirzr.singbox.service.SingboxProxyService
 import dev.amirzr.singbox.service.SingboxVPNService
@@ -115,6 +116,7 @@ class SingboxManager(private val context: Context) {
 
     fun disconnect() {
         disconnectCommandClient()
+        ServiceConfigStore.clear(context)
         val vpn = SingboxVPNService.instance
         val proxy = SingboxProxyService.instance
         when {
