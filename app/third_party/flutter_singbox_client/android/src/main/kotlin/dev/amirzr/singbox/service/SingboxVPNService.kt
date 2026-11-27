@@ -60,6 +60,7 @@ class SingboxVPNService : VpnService(), BoxPlatformInterface {
         if (prepare(this) != null) {
             Log.w(TAG, "VPN permission not granted")
             manager.notifyAlert("VPN permission required")
+            ServiceConfigStore.clear(applicationContext)
             stopSelf()
             return START_NOT_STICKY
         }
@@ -72,7 +73,25 @@ class SingboxVPNService : VpnService(), BoxPlatformInterface {
             return START_STICKY
         }
 
-        serviceConfig = parseConfig(intent)
+        val intentJson = intent?.getStringExtra(SessionOptions.EXTRA_KEY)
+        val restored = intentJson.isNullOrBlank()
+        val configJson = if (restored) ServiceConfigStore.load(applicationContext) else intentJson
+        if (configJson.isNullOrBlank()) {
+            Log.w(TAG, "No service config available for start")
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        if (!restored) {
+            ServiceConfigStore.save(applicationContext, configJson)
+        }
+
+        serviceConfig = parseConfigJson(configJson)
+        if (serviceConfig.config.isBlank()) {
+            Log.w(TAG, "Restored service config is invalid")
+            ServiceConfigStore.clear(applicationContext)
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
         val notif = ServiceNotificationHelper.buildNotification(
             this, serviceConfig.notification, serviceConfig.notification.title
@@ -93,12 +112,14 @@ class SingboxVPNService : VpnService(), BoxPlatformInterface {
 
     override fun onRevoke() {
         Log.i(TAG, "VPN revoked by system")
+        ServiceConfigStore.clear(applicationContext)
         stopGracefully()
     }
 
     fun stopGracefully() {
         if (stopping) return
         stopping = true
+        ServiceConfigStore.clear(applicationContext)
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopScope.launch {
             runCatching { networkMonitor?.stopMonitoring() }
@@ -210,8 +231,7 @@ class SingboxVPNService : VpnService(), BoxPlatformInterface {
         Log.d(TAG, "core notification: ${notification.title} — ${notification.body}")
     }
 
-    private fun parseConfig(intent: Intent?): SessionOptions {
-        val json = intent?.getStringExtra(SessionOptions.EXTRA_KEY) ?: return SessionOptions(config = "")
+    private fun parseConfigJson(json: String): SessionOptions {
         return try {
             SessionOptions.fromMap(SessionOptions.jsonObjectToMap(JSONObject(json)))
         } catch (e: Exception) {
